@@ -5,6 +5,7 @@ const siteSchema = new mongoose.Schema({
   score: { type: Number, default: 0 },
   simplifiedPolicy: { type: String },
   trackers: [String], // Example: ["cookies", "location", "email"]
+  category : {type:String},
 }, { timestamps: true });
 
 export default mongoose.model("Site", siteSchema);
