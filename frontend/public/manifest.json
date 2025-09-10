@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "DataGuardian",
+  "version": "0.1.0",
+  "description": "Guarding your online life",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "icons": {
+    "48": "extensionHome.png"
+  }
+}
