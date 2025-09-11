@@ -109,4 +109,37 @@ const getAllSites = async (req, res) => {
   }
 };
 
-export { analyzeSite, getSite, getAllSites };
+// Controller function to build network graph data for a site
+const getNetworkGraph = async (req, res) => {
+  try {
+    const url = req.query.url;
+    if (!url) {
+      return res.status(400).json({ error: "Missing url query parameter" });
+    }
+
+    const site = await Site.findOne({ url });
+    if (!site) {
+      return res.status(404).json({ error: "Site not found" });
+    }
+
+    // Start with the site node
+    const nodes = [{ id: site.url, type: "site" }];
+
+    // Create tracker nodes and links from site to each tracker
+    const links = [];
+    for (const tracker of site.trackers) {
+      nodes.push({ id: tracker, type: "tracker" });
+      links.push({ source: site.url, target: tracker });
+    }
+
+    // Respond with the nodes and links
+    return res.json({ nodes, links });
+  } catch (error) {
+    console.error("Error in getNetworkGraph:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+
+export { analyzeSite, getSite, getAllSites , getNetworkGraph };
