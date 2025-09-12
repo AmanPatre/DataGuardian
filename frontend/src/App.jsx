@@ -4,7 +4,7 @@ import FullReportView from "./pages/FullReportView";
 
 //Placeholder Data
 const siteData = {
-  url: "GlobalNewsDaily.com",
+  url: "GlobalNewsDaily.co",
   score: "C-",
   summary:
     "This site uses 25 trackers and shares your activity with 18 third-party companies, including data brokers.",
