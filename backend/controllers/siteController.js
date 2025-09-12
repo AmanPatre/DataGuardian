@@ -1,5 +1,5 @@
 import Site from "../models/Site.js";
-import { detectTrackers } from "../utility/trackerService.js";
+import { detectTrackers } from "../utility/trackerService.js"
 
 function calculatePrivacyScore({ url, simplifiedPolicy, trackers }) {
   let score = 0;
