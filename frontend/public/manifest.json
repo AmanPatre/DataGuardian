@@ -1,12 +1,44 @@
 {
   "manifest_version": 3,
   "name": "DataGuardian",
-  "version": "0.1.0",
-  "description": "Guarding your online life",
-  "action": {
-    "default_popup": "index.html"
-  },
+  "version": "1.0",
+  "description": "Your Digital Privacy Guardian - Know, Control, and Protect Every Byte of Your Data",
+
   "icons": {
-    "48": "extensionHome.png"
-  }
+    "16": "extensionHome.png",
+    "48": "extensionHome.png",
+    "128": "extensionHome.png"
+  },
+
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "action": {
+    "default_icon": {
+      "16": "extensionHome.png",
+      "48": "extensionHome.png",
+      "128": "extensionHome.png"
+    },
+    "default_popup": "index.html",
+    "default_title": "DataGuardian"
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+
+  "web_accessible_resources": [
+    {
+      "resources": ["*.js", "*.css", "*.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
