@@ -1,4 +1,3 @@
-// backend/models/Site.js
 import mongoose from "mongoose";
 
 const aiSummarySchema = new mongoose.Schema({
@@ -19,7 +18,7 @@ const aiSummarySchema = new mongoose.Schema({
     dataTypes: [String],
     purpose: String
   }],
-  note: String  // For fallback messages
+  note: String
 }, { _id: false });
 
 const siteSchema = new mongoose.Schema({
@@ -27,7 +26,8 @@ const siteSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true
+    trim: true,
+    index: true  // Only declare index once here
   },
   score: {
     type: Number,
@@ -117,8 +117,7 @@ siteSchema.pre('save', function (next) {
   next();
 });
 
-// Index for faster queries
-siteSchema.index({ url: 1 });
+// Removed duplicate indexes - only keep essential ones
 siteSchema.index({ lastAnalyzed: -1 });
 siteSchema.index({ score: -1 });
 siteSchema.index({ category: 1 });
