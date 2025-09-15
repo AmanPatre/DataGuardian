@@ -1,134 +1,346 @@
 import puppeteer from "puppeteer";
 
-// List of known tracker domain keywords to detect
+// Comprehensive list of tracker domains with pattern matching
 const TRACKER_DOMAINS = [
+  // Analytics & Tag Management
   "google-analytics.com",
   "googletagmanager.com",
-  "doubleclick.net",
+  "googleadservices.com",
+  "google-analytics.com",
+
+  // Social Media Trackers
   "facebook.net",
+  "connect.facebook.net",
   "facebook.com",
-  "adservice.google.com",
+  "twitter.com",
   "ads-twitter.com",
-  "optimizely.com",
-  "segment.com",
-  "mixpanel.com",
-  "hotjar.com",
-  "scorecardresearch.com",
-  "quantserve.com",
-  "adroll.com",
-  "outbrain.com",
-  "taboola.com",
-  "criteo.com",
+  "linkedin.com",
+  "snapchat.com",
+  "pinterest.com",
+  "tiktok.com",
+
+  // Ad Networks
+  "doubleclick.net",
+  "googlesyndication.com",
+  "adservice.google.com",
   "ads.google.com",
   "adnxs.com",
   "amazon-adsystem.com",
-  "atdmt.com",
-  "brightcove.com",
-  "chartbeat.com",
-  "clicktale.net",
+  "criteo.com",
+  "outbrain.com",
+  "taboola.com",
+  "adroll.com",
+  "rubiconproject.com",
+  "pubmatic.com",
+  "openx.net",
+  "adsystem.com",
+
+  // Analytics Platforms
+  "segment.com",
+  "mixpanel.com",
+  "amplitude.com",
+  "hotjar.com",
+  "fullstory.com",
+  "logrocket.com",
+  "optimizely.com",
+  "mouseflow.com",
+
+  // Data Brokers & Audience
+  "scorecardresearch.com",
+  "quantserve.com",
   "comscore.com",
   "demdex.net",
-  "doubleverify.com",
-  "eyeota.net",
-  "mathtag.com",
-  "mediadetect.com",
-  "mookie1.com",
-  "perf.overture.com",
-  "pubmatic.com",
-  "radiate.com",
-  "reinvigorate.net",
-  "rubiconproject.com",
-  "scorecardresearch.com",
-  "sharethis.com",
-  "spotxchange.com",
+  "adsrvr.org",
   "turn.com",
-  "twitter.com",
+  "eyeota.net",
+  "bluekai.com",
+
+  // Other Common Trackers
+  "chartbeat.com",
+  "clicktale.net",
+  "doubleverify.com",
+  "mathtag.com",
+  "sharethis.com",
+  "addthis.com",
   "trustarc.com",
-  "verizon.com",
-  "videoplayerhub.com",
-  "xaxis.com",
-  "yahoo.com",
-  "zedo.com",
-  "zedoads.com",
-  "zedoengineering.com",
-  "adform.net"
+  "adform.net",
+  "bing.com",
+  "yahoo.com"
 ];
 
-// Custom delay helper function that pauses execution for a specified time (milliseconds)
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+// Pattern-based detection for dynamic tracker domains
+const TRACKER_PATTERNS = [
+  /\.ads\./,
+  /\.analytics\./,
+  /\.tracking\./,
+  /\.metrics\./,
+  /\.telemetry\./,
+  /ads\d+\./,
+  /track\d*\./,
+  /collect\./,
+  /pixel\./,
+  /beacon\./
+];
 
-// Function to detect trackers on a given URL with simulated user interactions
-export async function detectTrackers(url) {
-  // Launch a new headless browser instance
-  const browser = await puppeteer.launch({ headless: true });
-  const page = await browser.newPage();
+/**
+ * Enhanced tracker detection with multiple strategies
+ * @param {string} url - The URL to analyze
+ * @param {Object} options - Configuration options
+ * @returns {Promise<Object>} Detection results
+ */
+export async function detectTrackers(url, options = {}) {
+  const {
+    timeout = 30000,
+    waitForInteractions = true,
+    includeFirstParty = false,
+    verbose = false
+  } = options;
 
-  // Set to hold unique detected tracker hostnames
-  const detectedTrackersSet = new Set();
-
-  // Enable request interception to monitor all network requests
-  await page.setRequestInterception(true);
-
-  // Event handler triggered on each network request
-  page.on("request", (req) => {
-    try {
-      // Extract hostname from request URL
-      const hostname = new URL(req.url()).hostname;
-
-      // Check if any part of the hostname matches known tracker domains
-      if (TRACKER_DOMAINS.some(tracker => hostname.includes(tracker))) {
-        detectedTrackersSet.add(hostname); // Add tracker hostname to set
-      }
-    } catch (err) {
-      // Ignore invalid URLs or parsing errors
-    }
-
-    // Continue processing the request without blocking any resource types
-    req.continue();
-  });
+  let browser = null;
+  const detectedTrackers = new Set();
+  const trackerRequests = [];
+  const mainDomain = new URL(url).hostname;
 
   try {
-    // Navigate to the URL and wait until DOM content is loaded
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // Launch browser with optimized settings
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-dev-shm-usage'
+      ]
+    });
 
-    // Simulate scrolling down by one viewport height to trigger lazy-loaded trackers
-    await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-    await delay(1500); // Wait for 1.5 seconds after scroll to allow requests to fire
+    const page = await browser.newPage();
 
-    // Simulate hovering over the page body to trigger hover-based trackers or UI effects
-    await page.hover("body");
-    await delay(1000); // Wait for 1 second after hover
+    // Set realistic viewport and user agent
+    await page.setViewport({ width: 1366, height: 768 });
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
 
-    // Simulate clicking on one interactive element from common selectors 
-    // This can trigger consent dialogs or additional scripts loading trackers
-    const clickSelectors = ["button", "a", ".btn", ".close", ".cookie-consent-accept"];
+    // Enhanced request monitoring
+    page.on('request', (request) => {
+      const requestUrl = request.url();
+      const requestDomain = extractDomain(requestUrl);
 
-    for (const selector of clickSelectors) {
-      const elements = await page.$$(selector); // Find all matching elements
-      if (elements.length > 0) {
-        try {
-          await elements[0].click(); // Click the first detected element
-          await delay(2000); // Wait 2 seconds for any network activity triggered by click
-          break; // Exit after one successful click
-        } catch (e) {
-          // Ignore errors like hidden or disabled buttons
+      if (requestDomain && isTracker(requestUrl, requestDomain, mainDomain, includeFirstParty)) {
+        detectedTrackers.add(requestDomain);
+
+        if (verbose) {
+          trackerRequests.push({
+            domain: requestDomain,
+            url: requestUrl,
+            type: request.resourceType(),
+            method: request.method()
+          });
         }
       }
+    });
+
+    // Navigate and wait for initial load
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout
+    });
+
+    // Optional: Simulate user interactions to trigger additional trackers
+    if (waitForInteractions) {
+      await simulateUserBehavior(page);
     }
-  } catch (err) {
-    if (err.name === "TimeoutError") {
-      console.warn("Timeout reached but proceeding anyway");
+
+    // Wait a bit more for any delayed trackers
+    await page.waitForTimeout(2000);
+
+  } catch (error) {
+    if (error.name === 'TimeoutError') {
+      console.warn(`Timeout reached for ${url}, but proceeding with detected trackers`);
     } else {
+      console.error(`Error analyzing ${url}:`, error.message);
+      return {
+        detectedTrackers: [],
+        error: error.message,
+        success: false
+      };
+    }
+  } finally {
+    if (browser) {
       await browser.close();
-      throw err; // Rethrow unexpected errors
     }
   }
 
-  // Close the browser session after detection is complete
-  await browser.close();
+  const result = {
+    url,
+    detectedTrackers: Array.from(detectedTrackers).sort(),
+    trackerCount: detectedTrackers.size,
+    success: true
+  };
 
-  // Return the array of unique detected tracker hostnames
-  return { detectedTrackers: Array.from(detectedTrackersSet) };
+  if (verbose) {
+    result.requests = trackerRequests;
+  }
+
+  return result;
 }
+
+/**
+ * Extract domain from URL safely
+ */
+function extractDomain(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Enhanced tracker detection logic
+ */
+function isTracker(url, domain, mainDomain, includeFirstParty) {
+  // Skip first-party requests unless explicitly requested
+  if (!includeFirstParty && domain === mainDomain) {
+    return false;
+  }
+
+  // Check against known tracker domains
+  const isKnownTracker = TRACKER_DOMAINS.some(tracker =>
+    domain.includes(tracker.toLowerCase())
+  );
+
+  if (isKnownTracker) return true;
+
+  // Check against tracker patterns
+  const matchesPattern = TRACKER_PATTERNS.some(pattern =>
+    pattern.test(domain)
+  );
+
+  if (matchesPattern) return true;
+
+  // Check for common tracker URL patterns
+  const trackerUrlPatterns = [
+    /\/analytics/i,
+    /\/tracking/i,
+    /\/collect/i,
+    /\/beacon/i,
+    /\/pixel/i,
+    /\/track/i,
+    /\/metric/i,
+    /\/telemetry/i,
+    /gtag|gtm/i,
+    /fbevents/i,
+    /doubleclick/i
+  ];
+
+  return trackerUrlPatterns.some(pattern => pattern.test(url));
+}
+
+/**
+ * Simulate realistic user behavior to trigger more trackers
+ */
+async function simulateUserBehavior(page) {
+  try {
+    // Scroll down to trigger lazy-loaded trackers
+    await page.evaluate(() => {
+      window.scrollBy(0, window.innerHeight);
+    });
+    await page.waitForTimeout(1500);
+
+    // Try to accept cookie consent if present
+    const consentSelectors = [
+      '[data-testid*="consent"]',
+      '[class*="cookie"] button',
+      '[class*="consent"] button',
+      'button[class*="accept"]',
+      '#cookie-accept',
+      '.cookie-consent-accept',
+      '[aria-label*="accept" i]'
+    ];
+
+    for (const selector of consentSelectors) {
+      try {
+        const element = await page.$(selector);
+        if (element) {
+          const isVisible = await element.isIntersectingViewport();
+          if (isVisible) {
+            await element.click();
+            await page.waitForTimeout(2000);
+            break;
+          }
+        }
+      } catch {
+        // Continue to next selector
+      }
+    }
+
+    // Safe hover using mouse coordinates instead of element hover
+    try {
+      const viewport = await page.viewport();
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      await page.waitForTimeout(500);
+    } catch {
+      // If mouse move fails, try alternative hover method
+      try {
+        await page.evaluate(() => {
+          // Dispatch mouseover event programmatically
+          const event = new MouseEvent('mouseover', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+          });
+          document.body.dispatchEvent(event);
+        });
+      } catch {
+        // Ignore if this also fails
+      }
+    }
+
+    await page.waitForTimeout(1000);
+
+    // Scroll back up
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(1000);
+
+  } catch (error) {
+    // Ignore errors in user simulation - don't let them break the main detection
+    console.warn('User simulation warning:', error.message);
+  }
+}
+
+/**
+ * Batch analyze multiple URLs
+ */
+export async function detectTrackersForMultipleUrls(urls, options = {}) {
+  const results = [];
+
+  for (const url of urls) {
+    try {
+      const result = await detectTrackers(url, options);
+      results.push(result);
+
+      // Add delay between requests to be respectful
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      results.push({
+        url,
+        error: error.message,
+        success: false,
+        detectedTrackers: []
+      });
+    }
+  }
+
+  return results;
+}
+
+// Example usage:
+// const result = await detectTrackers('https://example.com', {
+//   verbose: true,
+//   waitForInteractions: true
+// });
+// console.log(`Found ${result.trackerCount} trackers:`, result.detectedTrackers);  
