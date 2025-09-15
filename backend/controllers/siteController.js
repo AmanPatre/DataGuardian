@@ -2,6 +2,7 @@
 import Site from "../models/Site.js";
 import { detectTrackers } from "../utility/trackerService.js";
 import { generateAIPrivacySummary } from "../services/geminiService.js";
+import mongoose from 'mongoose';
 
 function calculatePrivacyScore({ url, simplifiedPolicy, trackers, aiSummary }) {
   let score = 0;
@@ -84,6 +85,11 @@ function getCategory(score) {
   return "Very Poor";
 }
 
+// Check if database is connected
+function isDatabaseConnected() {
+  return mongoose.connection.readyState === 1;
+}
+
 const analyzeSite = async (req, res) => {
   try {
     const { url, simplifiedPolicy } = req.body;
@@ -92,7 +98,18 @@ const analyzeSite = async (req, res) => {
 
     // Step 1: Detect trackers
     console.log("📊 Detecting trackers...");
-    const { detectedTrackers } = await detectTrackers(url);
+    const trackerResult = await detectTrackers(url);
+
+    if (!trackerResult.success) {
+      console.log("❌ Tracker detection failed:", trackerResult.error);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to analyze website trackers",
+        details: trackerResult.error
+      });
+    }
+
+    const { detectedTrackers } = trackerResult;
     console.log(`Found ${detectedTrackers.length} trackers:`, detectedTrackers);
 
     // Step 2: Generate AI Privacy Summary
@@ -113,21 +130,59 @@ const analyzeSite = async (req, res) => {
 
     console.log(`📈 Privacy Score: ${score} (${grade}) - ${category}`);
 
-    // Step 4: Save or update site record
-    let site = await Site.findOne({ url });
-    if (site) {
-      site.simplifiedPolicy = simplifiedPolicy;
-      site.trackers = detectedTrackers;
-      site.score = score;
-      site.grade = grade;
-      site.category = category;
-      site.aiSummary = aiSummary;
-      site.lastAnalyzed = new Date();
+    // Step 4: Try to save to database (but continue even if it fails)
+    let site = null;
+    let dbError = null;
 
-      await site.save();
-      console.log("📝 Updated existing site record");
+    if (isDatabaseConnected()) {
+      try {
+        site = await Site.findOne({ url });
+        if (site) {
+          site.simplifiedPolicy = simplifiedPolicy;
+          site.trackers = detectedTrackers;
+          site.score = score;
+          site.grade = grade;
+          site.category = category;
+          site.aiSummary = aiSummary;
+          site.lastAnalyzed = new Date();
+
+          await site.save();
+          console.log("📝 Updated existing site record");
+        } else {
+          site = await Site.create({
+            url,
+            simplifiedPolicy,
+            score,
+            grade,
+            category,
+            trackers: detectedTrackers,
+            aiSummary,
+            lastAnalyzed: new Date()
+          });
+          console.log("📝 Created new site record");
+        }
+      } catch (dbErr) {
+        console.warn("⚠️ Database operation failed:", dbErr.message);
+        dbError = dbErr.message;
+
+        // Create a temporary site object for response
+        site = {
+          url,
+          simplifiedPolicy,
+          score,
+          grade,
+          category,
+          trackers: detectedTrackers,
+          aiSummary,
+          lastAnalyzed: new Date()
+        };
+      }
     } else {
-      site = await Site.create({
+      console.warn("⚠️ Database not connected - creating temporary response");
+      dbError = "Database not connected";
+
+      // Create a temporary site object for response
+      site = {
         url,
         simplifiedPolicy,
         score,
@@ -136,14 +191,14 @@ const analyzeSite = async (req, res) => {
         trackers: detectedTrackers,
         aiSummary,
         lastAnalyzed: new Date()
-      });
-      console.log("📝 Created new site record");
+      };
     }
 
     // Step 5: Prepare response with formatted data
     const response = {
       success: true,
       message: "Site analyzed successfully",
+      ...(dbError && { warning: `Database issue: ${dbError}` }),
       site: {
         url: site.url,
         score: site.score,
@@ -174,19 +229,20 @@ const analyzeSite = async (req, res) => {
 // Generate user-friendly summary based on analysis
 function generateUserFriendlySummary(site) {
   const { trackers, score, grade, category, aiSummary } = site;
+  const trackerCount = Array.isArray(trackers) ? trackers.length : 0;
 
   let summary = "";
 
   if (score >= 80) {
-    summary = `This site has excellent privacy practices with minimal tracking (${trackers.length} trackers).`;
+    summary = `This site has excellent privacy practices with minimal tracking (${trackerCount} trackers).`;
   } else if (score >= 65) {
-    summary = `This site has good privacy practices but uses some tracking (${trackers.length} trackers).`;
+    summary = `This site has good privacy practices but uses some tracking (${trackerCount} trackers).`;
   } else if (score >= 50) {
-    summary = `This site has moderate privacy practices with noticeable tracking (${trackers.length} trackers).`;
+    summary = `This site has moderate privacy practices with noticeable tracking (${trackerCount} trackers).`;
   } else if (score >= 35) {
-    summary = `This site has poor privacy practices with significant tracking (${trackers.length} trackers).`;
+    summary = `This site has poor privacy practices with significant tracking (${trackerCount} trackers).`;
   } else {
-    summary = `This site has very poor privacy practices with extensive tracking (${trackers.length} trackers).`;
+    summary = `This site has very poor privacy practices with extensive tracking (${trackerCount} trackers).`;
   }
 
   // Add AI insights if available
@@ -202,29 +258,63 @@ function generateUserFriendlySummary(site) {
 
 const getSite = async (req, res) => {
   try {
+    if (!isDatabaseConnected()) {
+      return res.status(503).json({
+        success: false,
+        error: "Database not available"
+      });
+    }
+
     const site = await Site.findOne({ url: req.query.url });
     if (!site) {
-      return res.status(404).json({ message: "Site not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Site not found"
+      });
     }
+
     res.json({
-      ...site.toObject(),
-      summary: generateUserFriendlySummary(site)
+      success: true,
+      site: {
+        ...site.toObject(),
+        summary: generateUserFriendlySummary(site)
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 };
 
 const getAllSites = async (req, res) => {
   try {
+    if (!isDatabaseConnected()) {
+      return res.status(503).json({
+        success: false,
+        error: "Database not available",
+        sites: []
+      });
+    }
+
     const sites = await Site.find().sort({ lastAnalyzed: -1 });
     const sitesWithSummary = sites.map(site => ({
       ...site.toObject(),
       summary: generateUserFriendlySummary(site)
     }));
-    res.json(sitesWithSummary);
+
+    res.json({
+      success: true,
+      count: sitesWithSummary.length,
+      sites: sitesWithSummary
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      sites: []
+    });
     console.log(error);
   }
 };
@@ -235,6 +325,12 @@ const getNetworkGraph = async (req, res) => {
     const url = req.query.url;
     if (!url) {
       return res.status(400).json({ error: "Missing url query parameter" });
+    }
+
+    if (!isDatabaseConnected()) {
+      return res.status(503).json({
+        error: "Database not available"
+      });
     }
 
     const site = await Site.findOne({ url });
@@ -283,7 +379,12 @@ const getNetworkGraph = async (req, res) => {
     }
 
     // Respond with the nodes and links
-    return res.json({ nodes, links, summary: site.aiSummary });
+    return res.json({
+      success: true,
+      nodes,
+      links,
+      summary: site.aiSummary
+    });
   } catch (error) {
     console.error("Error in getNetworkGraph:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -298,6 +399,12 @@ const getAIPrivacySummary = async (req, res) => {
       return res.status(400).json({ error: "Missing url query parameter" });
     }
 
+    if (!isDatabaseConnected()) {
+      return res.status(503).json({
+        error: "Database not available"
+      });
+    }
+
     const site = await Site.findOne({ url });
     if (!site) {
       return res.status(404).json({ error: "Site not found" });
@@ -308,6 +415,7 @@ const getAIPrivacySummary = async (req, res) => {
     }
 
     res.json({
+      success: true,
       url: site.url,
       aiSummary: site.aiSummary,
       lastAnalyzed: site.lastAnalyzed,

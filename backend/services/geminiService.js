@@ -4,283 +4,172 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Tracker database with detailed information
-const TRACKER_DATABASE = {
-  'google-analytics.com': {
-    name: 'Google Analytics',
-    category: 'Analytics',
-    company: 'Google',
-    dataTypes: ['browsing behavior', 'page views', 'user interactions', 'device info'],
-    purpose: 'Website traffic analysis and user behavior tracking'
-  },
-  'facebook.net': {
-    name: 'Meta Pixel',
-    category: 'Social Media Tracking',
-    company: 'Meta (Facebook)',
-    dataTypes: ['browsing behavior', 'purchase activity', 'demographic data'],
-    purpose: 'Ad targeting and conversion tracking'
-  },
-  'doubleclick.net': {
-    name: 'DoubleClick',
-    category: 'Advertising',
-    company: 'Google',
-    dataTypes: ['browsing history', 'ad interactions', 'demographic profiles'],
-    purpose: 'Personalized advertising and remarketing'
-  },
-  'googletagmanager.com': {
-    name: 'Google Tag Manager',
-    category: 'Tag Management',
-    company: 'Google',
-    dataTypes: ['page interactions', 'events', 'conversion data'],
-    purpose: 'Managing multiple tracking tags and analytics'
-  },
-  'criteo.com': {
-    name: 'Criteo',
-    category: 'Advertising',
-    company: 'Criteo',
-    dataTypes: ['shopping behavior', 'product views', 'purchase history'],
-    purpose: 'Retargeting ads and personalized product recommendations'
-  },
-  'hotjar.com': {
-    name: 'Hotjar',
-    category: 'Analytics',
-    company: 'Hotjar',
-    dataTypes: ['mouse movements', 'clicks', 'form interactions', 'session recordings'],
-    purpose: 'User experience analysis and heatmap generation'
-  },
-  'mixpanel.com': {
-    name: 'Mixpanel',
-    category: 'Analytics',
-    company: 'Mixpanel',
-    dataTypes: ['user actions', 'event tracking', 'funnel analysis'],
-    purpose: 'Product analytics and user engagement tracking'
-  },
-  'taboola.com': {
-    name: 'Taboola',
-    category: 'Content Recommendation',
-    company: 'Taboola',
-    dataTypes: ['reading preferences', 'content engagement', 'browsing patterns'],
-    purpose: 'Content recommendations and native advertising'
-  },
-  'outbrain.com': {
-    name: 'Outbrain',
-    category: 'Content Recommendation',
-    company: 'Outbrain',
-    dataTypes: ['article preferences', 'engagement data', 'interest profiles'],
-    purpose: 'Content discovery and sponsored content delivery'
-  },
-  'amazon-adsystem.com': {
-    name: 'Amazon DSP',
-    category: 'Advertising',
-    company: 'Amazon',
-    dataTypes: ['shopping behavior', 'product interests', 'purchase patterns'],
-    purpose: 'Display advertising and product promotion'
-  }
-};
-
-// Get tracker information from database or infer from domain
-function getTrackerInfo(domain) {
-  // Direct match
-  if (TRACKER_DATABASE[domain]) {
-    return TRACKER_DATABASE[domain];
-  }
-
-  // Partial match for subdomains
-  for (const [key, value] of Object.entries(TRACKER_DATABASE)) {
-    if (domain.includes(key.split('.')[0])) {
-      return value;
-    }
-  }
-
-  // Infer information from domain patterns
-  const lowerDomain = domain.toLowerCase();
-
-  if (lowerDomain.includes('google') || lowerDomain.includes('goog')) {
-    return {
-      name: domain,
-      category: 'Google Services',
-      company: 'Google',
-      dataTypes: ['browsing data', 'user interactions'],
-      purpose: 'Analytics and advertising services'
-    };
-  }
-
-  if (lowerDomain.includes('facebook') || lowerDomain.includes('meta')) {
-    return {
-      name: domain,
-      category: 'Social Media',
-      company: 'Meta',
-      dataTypes: ['social interactions', 'browsing behavior'],
-      purpose: 'Social media integration and advertising'
-    };
-  }
-
-  if (lowerDomain.includes('ads') || lowerDomain.includes('ad')) {
-    return {
-      name: domain,
-      category: 'Advertising',
-      company: 'Unknown Ad Network',
-      dataTypes: ['browsing history', 'ad interactions'],
-      purpose: 'Advertising and marketing'
-    };
-  }
-
-  // Default fallback
-  return {
-    name: domain,
-    category: 'Unknown',
-    company: 'Unknown',
-    dataTypes: ['browsing data'],
-    purpose: 'Data collection and tracking'
-  };
-}
-
-// Generate AI summary for trackers
-export async function generateAIPrivacySummary(trackers, siteUrl) {
+export async function generateAIPrivacySummary(trackers, url) {
   try {
-    // Get tracker information
-    const trackerInfos = trackers.map(tracker => ({
-      domain: tracker,
-      ...getTrackerInfo(tracker)
-    }));
-
-    // Prepare prompt for Gemini
-    const prompt = `
-You are a privacy expert helping users understand website tracking. Analyze the following trackers found on ${siteUrl} and provide a clear, user-friendly summary.
-
-Trackers detected:
-${trackerInfos.map(t => `
-- ${t.name} (${t.domain})
-  Category: ${t.category}
-  Company: ${t.company}
-  Data Types: ${t.dataTypes.join(', ')}
-  Purpose: ${t.purpose}
-`).join('')}
-
-Please provide a structured response with these sections:
-
-**WHAT THEY COLLECT:**
-List the main types of data being collected (be specific but user-friendly)
-
-**WHO THEY SHARE WITH:**
-List the main companies/partners receiving data
-
-**HOW LONG THEY KEEP IT:**
-Provide typical data retention information for these types of trackers
-
-**KEY PRIVACY RISKS:**
-Explain the main privacy concerns in simple terms
-
-**TRACKER BREAKDOWN:**
-For each major tracker, provide a 1-2 sentence explanation of what it does
-
-Keep the language simple, engaging, and focus on what matters most to users' privacy. Use bullet points and be concise.
-`;
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn('Gemini API key not found');
+      return {
+        success: false,
+        note: "AI analysis unavailable - API key missing",
+        summary: {
+          whatTheyCollect: [],
+          whoTheyShareWith: [],
+          howLongTheyKeep: "Information not available",
+          keyRisks: [],
+          trackerBreakdown: []
+        }
+      };
+    }
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
 
-    // Parse the response into structured format
-    const sections = parseGeminiResponse(summary);
+    // Create a comprehensive prompt
+    const prompt = `
+You are a privacy analysis expert. Analyze the following website and its trackers to provide a comprehensive privacy summary.
+
+Website: ${url}
+Detected Trackers: ${trackers.join(', ')}
+
+Please provide a JSON response with the following structure:
+{
+  "whatTheyCollect": ["specific data types they collect"],
+  "whoTheyShareWith": ["companies/partners they share data with"],
+  "howLongTheyKeep": "data retention period",
+  "keyRisks": ["privacy risks to users"],
+  "trackerBreakdown": ["explanation of major trackers found"]
+}
+
+Guidelines:
+- Be specific and factual about data collection practices
+- Identify actual companies based on the tracker domains
+- Explain privacy risks in user-friendly language
+- Keep each array item concise but informative
+- Focus on the most significant privacy concerns
+- If information is unknown, indicate that clearly
+
+Analyze the tracker domains to identify:
+- Google services (analytics, ads, tag manager)
+- Social media trackers (Facebook, Twitter, etc.)
+- Ad networks (DoubleClick, AdNxs, etc.)
+- Analytics services (Mixpanel, Hotjar, etc.)
+- Data brokers and audience platforms
+
+Provide realistic assessments based on the actual trackers detected.
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
+
+    // Try to parse JSON from the response
+    let summary;
+    try {
+      // Extract JSON from the response (sometimes the model adds extra text)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        summary = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.warn('Failed to parse AI response as JSON:', parseError.message);
+
+      // Fallback: create a basic summary based on trackers
+      summary = createFallbackSummary(trackers, url);
+    }
+
+    // Validate and sanitize the summary
+    const validatedSummary = validateSummary(summary);
 
     return {
       success: true,
-      summary: sections,
+      summary: validatedSummary,
       trackerCount: trackers.length,
-      trackerDetails: trackerInfos
+      rawResponse: text // For debugging
     };
 
   } catch (error) {
-    console.error('Error generating AI summary:', error);
+    console.error('Gemini AI error:', error.message);
 
-    // Fallback to manual summary if AI fails
-    return generateFallbackSummary(trackers, siteUrl);
+    // Return fallback summary instead of failing completely
+    return {
+      success: false,
+      note: `AI analysis failed: ${error.message}`,
+      summary: createFallbackSummary(trackers, url)
+    };
   }
 }
 
-// Parse Gemini response into structured sections
-function parseGeminiResponse(response) {
-  const sections = {
-    whatTheyCollect: [],
-    whoTheyShareWith: [],
-    howLongTheyKeep: '',
-    keyRisks: [],
-    trackerBreakdown: []
-  };
+function createFallbackSummary(trackers, url) {
+  const domain = new URL(url).hostname;
 
-  try {
-    const lines = response.split('\n');
-    let currentSection = null;
+  // Analyze trackers to create basic summary
+  const googleTrackers = trackers.filter(t => t.includes('google'));
+  const facebookTrackers = trackers.filter(t => t.includes('facebook'));
+  const adTrackers = trackers.filter(t =>
+    t.includes('ads') || t.includes('doubleclick') || t.includes('adnxs')
+  );
+  const analyticsTrackers = trackers.filter(t =>
+    t.includes('analytics') || t.includes('mixpanel') || t.includes('hotjar')
+  );
 
-    for (const line of lines) {
-      const trimmed = line.trim();
+  const companies = [];
+  if (googleTrackers.length > 0) companies.push('Google');
+  if (facebookTrackers.length > 0) companies.push('Meta/Facebook');
+  if (adTrackers.length > 0) companies.push('Advertising Networks');
+  if (analyticsTrackers.length > 0) companies.push('Analytics Providers');
 
-      if (trimmed.includes('WHAT THEY COLLECT')) {
-        currentSection = 'whatTheyCollect';
-      } else if (trimmed.includes('WHO THEY SHARE WITH')) {
-        currentSection = 'whoTheyShareWith';
-      } else if (trimmed.includes('HOW LONG THEY KEEP')) {
-        currentSection = 'howLongTheyKeep';
-      } else if (trimmed.includes('KEY PRIVACY RISKS') || trimmed.includes('KEY RISKS')) {
-        currentSection = 'keyRisks';
-      } else if (trimmed.includes('TRACKER BREAKDOWN')) {
-        currentSection = 'trackerBreakdown';
-      } else if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
-        const item = trimmed.substring(2).trim();
-        if (currentSection && sections[currentSection] && Array.isArray(sections[currentSection])) {
-          sections[currentSection].push(item);
-        }
-      } else if (currentSection === 'howLongTheyKeep' && trimmed && !trimmed.includes('**')) {
-        sections.howLongTheyKeep += (sections.howLongTheyKeep ? ' ' : '') + trimmed;
+  return {
+    whatTheyCollect: [
+      "Browsing behavior and page views",
+      "Device and browser information",
+      "IP address and location data",
+      ...(trackers.length > 5 ? ["User interactions and clicks"] : []),
+      ...(trackers.length > 10 ? ["Cross-site tracking data"] : [])
+    ],
+    whoTheyShareWith: companies.length > 0 ? companies : ["Third-party partners"],
+    howLongTheyKeep: trackers.length > 8 ? "Up to 2 years or indefinitely" : "Varies by service",
+    keyRisks: [
+      `Your browsing on ${domain} may be tracked across other websites`,
+      ...(trackers.length > 5 ? ["Detailed behavioral profiling for advertising"] : []),
+      ...(trackers.length > 10 ? ["Extensive data sharing with multiple partners"] : [])
+    ],
+    trackerBreakdown: trackers.slice(0, 4).map(tracker => {
+      if (tracker.includes('google')) {
+        return `${tracker}: Google's tracking service for analytics and advertising`;
+      } else if (tracker.includes('facebook')) {
+        return `${tracker}: Meta's social media and advertising tracker`;
+      } else if (tracker.includes('doubleclick')) {
+        return `${tracker}: Google's advertising network for targeted ads`;
+      } else {
+        return `${tracker}: Third-party tracking and analytics service`;
       }
-    }
-
-    return sections;
-  } catch (error) {
-    console.error('Error parsing Gemini response:', error);
-    return generateFallbackStructure();
-  }
-}
-
-// Fallback summary generation if AI fails
-function generateFallbackSummary(trackers, siteUrl) {
-  const trackerInfos = trackers.map(tracker => ({
-    domain: tracker,
-    ...getTrackerInfo(tracker)
-  }));
-
-  const companies = [...new Set(trackerInfos.map(t => t.company))];
-  const dataTypes = [...new Set(trackerInfos.flatMap(t => t.dataTypes))];
-
-  return {
-    success: false,
-    summary: {
-      whatTheyCollect: dataTypes.slice(0, 5),
-      whoTheyShareWith: companies.slice(0, 8),
-      howLongTheyKeep: "Typically 1-2 years for active data, indefinitely for anonymized data",
-      keyRisks: [
-        "Detailed browsing profiles can be created",
-        "Data may be sold to third parties",
-        "Cross-site tracking enables extensive surveillance"
-      ],
-      trackerBreakdown: trackerInfos.slice(0, 5).map(t =>
-        `${t.name}: ${t.purpose}`
-      )
-    },
-    trackerCount: trackers.length,
-    trackerDetails: trackerInfos,
-    note: "AI analysis unavailable - showing basic tracker information"
+    })
   };
 }
 
-function generateFallbackStructure() {
-  return {
-    whatTheyCollect: ["Browsing behavior", "Device information", "Location data"],
-    whoTheyShareWith: ["Advertising networks", "Analytics companies", "Data brokers"],
-    howLongTheyKeep: "Varies by company, typically 1-2 years",
-    keyRisks: ["Detailed user profiling", "Cross-site tracking"],
-    trackerBreakdown: ["Basic tracker information available"]
+function validateSummary(summary) {
+  const validated = {
+    whatTheyCollect: Array.isArray(summary.whatTheyCollect) ?
+      summary.whatTheyCollect.slice(0, 8) :
+      ["Information not available"],
+
+    whoTheyShareWith: Array.isArray(summary.whoTheyShareWith) ?
+      summary.whoTheyShareWith.slice(0, 10) :
+      ["Information not available"],
+
+    howLongTheyKeep: typeof summary.howLongTheyKeep === 'string' ?
+      summary.howLongTheyKeep :
+      "Information not available",
+
+    keyRisks: Array.isArray(summary.keyRisks) ?
+      summary.keyRisks.slice(0, 6) :
+      ["Privacy risks could not be determined"],
+
+    trackerBreakdown: Array.isArray(summary.trackerBreakdown) ?
+      summary.trackerBreakdown.slice(0, 5) :
+      []
   };
+
+  return validated;
 }

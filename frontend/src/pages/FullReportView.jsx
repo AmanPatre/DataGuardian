@@ -19,8 +19,6 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
     grade = "F",
     url = "Unknown site",
     simplifiedPolicy = "",
-    category = "Unknown",
-    trackers = [],
     trackerCount = 0,
     aiSummary = null,
     permissions = { notifications: false, cookies: false },
