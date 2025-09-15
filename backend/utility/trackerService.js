@@ -83,6 +83,36 @@ const TRACKER_PATTERNS = [
 ];
 
 /**
+ * Cross-platform delay function
+ * @param {number} ms - Milliseconds to wait
+ * @returns {Promise<void>}
+ */
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Cross-platform wait function for pages
+ * @param {object} page - Puppeteer page object
+ * @param {number} ms - Milliseconds to wait
+ * @returns {Promise<void>}
+ */
+async function waitForTimeout(page, ms) {
+  // Try modern method first
+  if (typeof page.waitForDelay === 'function') {
+    return await page.waitForDelay(ms);
+  }
+  // Fall back to deprecated method if available
+  else if (typeof page.waitForTimeout === 'function') {
+    return await page.waitForTimeout(ms);
+  }
+  // Use basic Promise delay as last resort
+  else {
+    return await delay(ms);
+  }
+}
+
+/**
  * Enhanced tracker detection with multiple strategies
  * @param {string} url - The URL to analyze
  * @param {Object} options - Configuration options
@@ -153,7 +183,7 @@ export async function detectTrackers(url, options = {}) {
     }
 
     // Wait a bit more for any delayed trackers
-    await page.waitForTimeout(2000);
+    await waitForTimeout(page, 2000);
 
   } catch (error) {
     if (error.name === 'TimeoutError') {
@@ -247,7 +277,7 @@ async function simulateUserBehavior(page) {
     await page.evaluate(() => {
       window.scrollBy(0, window.innerHeight);
     });
-    await page.waitForTimeout(1500);
+    await waitForTimeout(page, 1500);
 
     // Try to accept cookie consent if present
     const consentSelectors = [
@@ -267,7 +297,7 @@ async function simulateUserBehavior(page) {
           const isVisible = await element.isIntersectingViewport();
           if (isVisible) {
             await element.click();
-            await page.waitForTimeout(2000);
+            await waitForTimeout(page, 2000);
             break;
           }
         }
@@ -280,7 +310,7 @@ async function simulateUserBehavior(page) {
     try {
       const viewport = await page.viewport();
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
-      await page.waitForTimeout(500);
+      await waitForTimeout(page, 500);
     } catch {
       // If mouse move fails, try alternative hover method
       try {
@@ -298,13 +328,13 @@ async function simulateUserBehavior(page) {
       }
     }
 
-    await page.waitForTimeout(1000);
+    await waitForTimeout(page, 1000);
 
     // Scroll back up
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
-    await page.waitForTimeout(1000);
+    await waitForTimeout(page, 1000);
 
   } catch (error) {
     // Ignore errors in user simulation - don't let them break the main detection
@@ -324,7 +354,7 @@ export async function detectTrackersForMultipleUrls(urls, options = {}) {
       results.push(result);
 
       // Add delay between requests to be respectful
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await delay(1000);
     } catch (error) {
       results.push({
         url,
@@ -343,4 +373,4 @@ export async function detectTrackersForMultipleUrls(urls, options = {}) {
 //   verbose: true,
 //   waitForInteractions: true
 // });
-// console.log(`Found ${result.trackerCount} trackers:`, result.detectedTrackers);  
+// console.log(`Found ${result.trackerCount} trackers:`, result.detectedTrackers);
