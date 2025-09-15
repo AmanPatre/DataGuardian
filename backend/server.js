@@ -1,10 +1,11 @@
+dotenv.config();
+
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import siteRoutes from "./routes/siteRoutes.js";
 import connectDB from "./config/db.js";
 
-dotenv.config();
 const app = express();
 
 // Enhanced CORS configuration
@@ -46,8 +47,8 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
+// 404 handler - Fixed: Remove the '*' pattern and use a catch-all middleware
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`

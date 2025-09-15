@@ -1,11 +1,10 @@
 // backend/services/geminiService.js
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export async function generateAIPrivacySummary(trackers, url) {
   try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     if (!process.env.GEMINI_API_KEY) {
       console.warn('Gemini API key not found');
       return {
