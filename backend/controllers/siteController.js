@@ -494,6 +494,12 @@ const getNetworkGraph = async (req, res) => {
           company: "Warner Bros. Discovery (Turner)",
         },
         {
+          test: /collector\.github\.com/,
+          name: "GitHub Telemetry",
+          category: "Analytics",
+          company: "GitHub",
+        },
+        {
           test: /cloudflareinsights\.com/,
           name: "Cloudflare Web Analytics",
           category: "Analytics",

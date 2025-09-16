@@ -445,6 +445,12 @@ function classifyDomain(lower) {
       company: "Warner Bros. Discovery",
     },
     {
+      re: /collector\.github\.com/,
+      name: "GitHub Telemetry",
+      category: "Analytics",
+      company: "GitHub",
+    },
+    {
       re: /cloudflareinsights\.com/,
       name: "Cloudflare Web Analytics",
       category: "Analytics",
