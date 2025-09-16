@@ -12,6 +12,8 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "axios": "^1.12.1",
+    "d3": "^7.9.0",
+    "d3.js": "^0.0.2-security",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
