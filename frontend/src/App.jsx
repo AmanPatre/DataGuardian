@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import PopupView from "./pages/PopupView";
 import FullReportView from "./pages/FullReportView";
 import axios from "axios";
@@ -42,30 +42,123 @@ function App() {
   const [siteData, setSiteData] = useState(null);
   const [loading, setLoading] = useState(true); // Start with loading to try auto-detection
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState([]);
   const [manualUrl, setManualUrl] = useState("");
   const [showManualInput, setShowManualInput] = useState(false);
 
-  const addDebugInfo = (message) => {
-    console.log(message);
-    setDebugInfo(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+  // Simplified logging - only to console
+  const logInfo = (message) => {
+    console.log(`DataGuardian: ${message}`);
   };
+
+  // Use useCallback to memoize analyzeUrl function
+  const analyzeUrl = useCallback((inputUrl, isAutoDetected = false) => {
+    logInfo(
+      `Starting analysis (${isAutoDetected ? "auto-detected" : "manual"})...`
+    );
+    setLoading(true);
+    setError(null);
+
+    if (!inputUrl || !inputUrl.trim()) {
+      logInfo("Empty or invalid input");
+      setError("Please enter a URL");
+      setLoading(false);
+      setShowManualInput(true);
+      return;
+    }
+
+    let url = inputUrl.trim();
+
+    // Add protocol if missing
+    if (!/^https?:\/\//i.test(url)) {
+      url = "https://" + url;
+      logInfo(`Added protocol: "${url}"`);
+    }
+
+    // Validate URL
+    let urlObj;
+    try {
+      urlObj = new URL(url);
+      logInfo("URL validation successful");
+    } catch (urlError) {
+      logInfo(`URL validation failed: ${urlError.message}`);
+      setError(`Invalid URL: ${urlError.message}`);
+      setLoading(false);
+      setShowManualInput(true);
+      return;
+    }
+
+    // Check for restricted protocols
+    const restrictedProtocols = [
+      "chrome:",
+      "chrome-extension:",
+      "edge:",
+      "about:",
+      "moz-extension:",
+      "file:",
+    ];
+    if (restrictedProtocols.some((protocol) => url.startsWith(protocol))) {
+      logInfo(`Restricted protocol detected: ${url}`);
+      setError(
+        "Cannot analyze browser internal pages. Please navigate to a regular website or enter a URL manually."
+      );
+      setLoading(false);
+      setShowManualInput(true);
+      return;
+    }
+
+    // Normalize URL
+    if (!urlObj.pathname || urlObj.pathname === "") {
+      urlObj.pathname = "/";
+    }
+    const finalUrl = urlObj.toString();
+    logInfo(`Final URL for API: "${finalUrl}"`);
+
+    // Prepare API request
+    const requestData = {
+      url: finalUrl,
+      simplifiedPolicy:
+        "This site uses cookies and collects emails encrypted no data sharing gdpr privacy focused",
+    };
+
+    logInfo("Sending request to backend...");
+
+    // Send to backend
+    axios
+      .post("http://localhost:5000/api/sites/analyze", requestData)
+      .then((response) => {
+        logInfo("Analysis complete!");
+        const site = response.data.site;
+        site.trackers = categorizeTrackers(site.trackers || []);
+        setSiteData(site);
+        setLoading(false);
+        setShowManualInput(false); // Hide manual input on success
+      })
+      .catch((err) => {
+        logInfo(`Backend error: ${err.message}`);
+        console.error("Full error:", err);
+        setError(
+          `Analysis failed: ${err.response?.data?.message || err.message}`
+        );
+        setLoading(false);
+        setShowManualInput(true); // Show manual input on error
+      });
+  }, []); // Empty dependency array since analyzeUrl doesn't depend on any props or state
 
   // Try to auto-detect current tab URL on component mount
   useEffect(() => {
     const tryAutoDetection = async () => {
-      addDebugInfo("🚀 Starting DataGuardian - trying auto-detection...");
-      
+      logInfo("Starting auto-detection...");
+
       // Check if chrome extension APIs are available
-      if (typeof chrome === 'undefined' || !chrome.tabs) {
-        addDebugInfo("⚠️ Chrome APIs not available - falling back to manual input");
+      if (typeof chrome === "undefined" || !chrome.tabs) {
+        logInfo("Chrome APIs not available - falling back to manual input");
         setShowManualInput(true);
         setLoading(false);
         return;
       }
 
       try {
-        // FIRST: Try to get current tab with DETAILED logging
+        // Get current tab
         const tabs = await new Promise((resolve, reject) => {
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (chrome.runtime.lastError) {
@@ -76,83 +169,82 @@ function App() {
           });
         });
 
-        addDebugInfo(`📋 Found ${tabs?.length || 0} active tabs`);
-        
+        logInfo(`Found ${tabs?.length || 0} active tabs`);
+
         if (tabs && tabs.length > 0) {
           const tab = tabs[0];
-          addDebugInfo(`🔍 Tab details:`);
-          addDebugInfo(`   - ID: ${tab.id}`);
-          addDebugInfo(`   - URL: ${tab.url || 'UNDEFINED'}`);
-          addDebugInfo(`   - Title: ${tab.title || 'UNDEFINED'}`);
-          addDebugInfo(`   - Status: ${tab.status}`);
-          addDebugInfo(`   - WindowId: ${tab.windowId}`);
+          logInfo(`Tab URL: ${tab.url || "UNDEFINED"}`);
 
-          // If URL is undefined, try to FORCE activeTab permission
+          // If URL is undefined, try to trigger activeTab permission
           if (!tab.url) {
-            addDebugInfo("🔧 URL is undefined - trying to trigger activeTab permission...");
-            
+            logInfo(
+              "URL is undefined - trying to trigger activeTab permission..."
+            );
+
             try {
-              // Method 1: Execute a simple script to trigger activeTab
               if (chrome.scripting) {
-                addDebugInfo("🎯 Attempting script injection to trigger activeTab...");
-                
+                logInfo("Attempting script injection to trigger activeTab...");
+
                 await new Promise((resolve, reject) => {
-                  chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: () => {
-                      return {
-                        url: window.location.href,
-                        host: window.location.host,
-                        pathname: window.location.pathname
-                      };
-                    }
-                  }, (results) => {
-                    if (chrome.runtime.lastError) {
-                      addDebugInfo(`❌ Script injection failed: ${chrome.runtime.lastError.message}`);
-                      reject(new Error(chrome.runtime.lastError.message));
-                    } else {
-                      addDebugInfo(`✅ Script injection successful!`);
-                      if (results && results[0] && results[0].result) {
-                        const pageInfo = results[0].result;
-                        addDebugInfo(`🎯 Got page info from script: ${pageInfo.url}`);
-                        resolve(pageInfo.url);
+                  chrome.scripting.executeScript(
+                    {
+                      target: { tabId: tab.id },
+                      func: () => {
+                        return {
+                          url: window.location.href,
+                          host: window.location.host,
+                          pathname: window.location.pathname,
+                        };
+                      },
+                    },
+                    (results) => {
+                      if (chrome.runtime.lastError) {
+                        logInfo(
+                          `Script injection failed: ${chrome.runtime.lastError.message}`
+                        );
+                        reject(new Error(chrome.runtime.lastError.message));
                       } else {
-                        addDebugInfo(`⚠️ Script executed but no results returned`);
-                        reject(new Error("No results from script"));
+                        logInfo("Script injection successful!");
+                        if (results && results[0] && results[0].result) {
+                          const pageInfo = results[0].result;
+                          logInfo(`Got page info from script: ${pageInfo.url}`);
+                          resolve(pageInfo.url);
+                        } else {
+                          logInfo("Script executed but no results returned");
+                          reject(new Error("No results from script"));
+                        }
                       }
                     }
-                  });
+                  );
                 });
 
-                // If script injection worked, the URL should now be available
+                // Check if URL is now available
                 const updatedTabs = await new Promise((resolve, reject) => {
-                  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                    if (chrome.runtime.lastError) {
-                      reject(new Error(chrome.runtime.lastError.message));
-                    } else {
-                      resolve(tabs);
+                  chrome.tabs.query(
+                    { active: true, currentWindow: true },
+                    (tabs) => {
+                      if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                      } else {
+                        resolve(tabs);
+                      }
                     }
-                  });
+                  );
                 });
 
                 if (updatedTabs[0]?.url) {
-                  addDebugInfo(`🎯 SUCCESS! URL now available after script: ${updatedTabs[0].url}`);
+                  logInfo(`SUCCESS! URL now available: ${updatedTabs[0].url}`);
                   analyzeUrl(updatedTabs[0].url, true);
                   return;
-                } else {
-                  addDebugInfo(`❌ URL still undefined after script injection`);
                 }
-
               } else {
-                addDebugInfo("❌ chrome.scripting API not available");
+                logInfo("chrome.scripting API not available");
               }
-
             } catch (scriptError) {
-              addDebugInfo(`❌ Script injection failed: ${scriptError.message}`);
+              logInfo(`Script injection failed: ${scriptError.message}`);
             }
 
-            // Method 2: Try using chrome.tabs.get() for more details
-            addDebugInfo("🔧 Trying chrome.tabs.get() for more tab details...");
+            // Try using chrome.tabs.get() for more details
             try {
               const detailedTab = await new Promise((resolve, reject) => {
                 chrome.tabs.get(tab.id, (tabInfo) => {
@@ -164,42 +256,39 @@ function App() {
                 });
               });
 
-              addDebugInfo(`📋 Detailed tab info:`);
-              addDebugInfo(`   - URL: ${detailedTab.url || 'STILL UNDEFINED'}`);
-              addDebugInfo(`   - pendingUrl: ${detailedTab.pendingUrl || 'NONE'}`);
-              
               if (detailedTab.url) {
-                addDebugInfo(`🎯 Found URL via tabs.get(): ${detailedTab.url}`);
+                logInfo(`Found URL via tabs.get(): ${detailedTab.url}`);
                 analyzeUrl(detailedTab.url, true);
                 return;
               } else if (detailedTab.pendingUrl) {
-                addDebugInfo(`🎯 Using pendingUrl: ${detailedTab.pendingUrl}`);
+                logInfo(`Using pendingUrl: ${detailedTab.pendingUrl}`);
                 analyzeUrl(detailedTab.pendingUrl, true);
                 return;
               }
-
             } catch (getError) {
-              addDebugInfo(`❌ chrome.tabs.get() failed: ${getError.message}`);
+              logInfo(`chrome.tabs.get() failed: ${getError.message}`);
             }
-
           } else if (tab.url) {
-            addDebugInfo(`🎯 Auto-detected URL: ${tab.url}`);
-            
+            logInfo(`Auto-detected URL: ${tab.url}`);
+
             // Check if it's a valid URL we can analyze
-            if (tab.url.startsWith('http://') || tab.url.startsWith('https://')) {
-              addDebugInfo("✅ Valid HTTP/HTTPS URL detected - auto-analyzing...");
+            if (
+              tab.url.startsWith("http://") ||
+              tab.url.startsWith("https://")
+            ) {
+              logInfo("Valid HTTP/HTTPS URL detected - auto-analyzing...");
               analyzeUrl(tab.url, true);
               return;
             } else {
-              addDebugInfo(`⚠️ Cannot analyze URL with protocol: ${tab.url.split(':')[0]}:`);
+              logInfo(
+                `Cannot analyze URL with protocol: ${tab.url.split(":")[0]}:`
+              );
             }
           }
-        } else {
-          addDebugInfo("⚠️ No tabs found in query result");
         }
 
-        // Method 3: Try broader tab query as last resort
-        addDebugInfo("🔧 Trying broader tab query (all windows)...");
+        // Try broader tab query as last resort
+        logInfo("Trying broader tab query (all windows)...");
         const allTabs = await new Promise((resolve, reject) => {
           chrome.tabs.query({ active: true }, (tabs) => {
             if (chrome.runtime.lastError) {
@@ -210,118 +299,36 @@ function App() {
           });
         });
 
-        addDebugInfo(`📊 Found ${allTabs?.length || 0} active tabs across all windows`);
-        
+        logInfo(`Found ${allTabs?.length || 0} active tabs across all windows`);
+
         if (allTabs && allTabs.length > 0) {
           for (let i = 0; i < allTabs.length; i++) {
             const tab = allTabs[i];
-            addDebugInfo(`   Tab ${i}: ${tab.url || 'NO_URL'} (Window: ${tab.windowId})`);
-            
-            if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
-              addDebugInfo(`🎯 Using tab ${i} URL: ${tab.url}`);
+
+            if (
+              tab.url &&
+              (tab.url.startsWith("http://") || tab.url.startsWith("https://"))
+            ) {
+              logInfo(`Using tab ${i} URL: ${tab.url}`);
               analyzeUrl(tab.url, true);
               return;
             }
           }
         }
-
       } catch (error) {
-        addDebugInfo(`❌ Auto-detection failed: ${error.message}`);
+        logInfo(`Auto-detection failed: ${error.message}`);
       }
 
       // Fall back to manual input
-      addDebugInfo("🔄 All auto-detection methods failed - falling back to manual input");
-      addDebugInfo("💡 This usually means you're on a restricted page or permissions aren't fully granted");
+      logInfo(
+        "All auto-detection methods failed - falling back to manual input"
+      );
       setShowManualInput(true);
       setLoading(false);
     };
 
     tryAutoDetection();
-  }, []);
-
-  const analyzeUrl = (inputUrl, isAutoDetected = false) => {
-    addDebugInfo(`🎯 Starting analysis (${isAutoDetected ? 'auto-detected' : 'manual'})...`);
-    setLoading(true);
-    setError(null);
-    
-    addDebugInfo(`📝 Input URL: "${inputUrl}"`);
-    
-    if (!inputUrl || !inputUrl.trim()) {
-      addDebugInfo("❌ Empty or invalid input");
-      setError("Please enter a URL");
-      setLoading(false);
-      setShowManualInput(true);
-      return;
-    }
-    
-    let url = inputUrl.trim();
-    addDebugInfo(`🔧 Trimmed URL: "${url}"`);
-    
-    // Add protocol if missing
-    if (!/^https?:\/\//i.test(url)) {
-      url = "https://" + url;
-      addDebugInfo(`🔗 Added protocol: "${url}"`);
-    } else {
-      addDebugInfo(`✅ URL already has protocol: "${url}"`);
-    }
-    
-    // Validate URL
-    let urlObj;
-    try {
-      urlObj = new URL(url);
-      addDebugInfo(`✅ URL validation successful`);
-      addDebugInfo(`   - Host: ${urlObj.host}`);
-    } catch (urlError) {
-      addDebugInfo(`❌ URL validation failed: ${urlError.message}`);
-      setError(`Invalid URL: ${urlError.message}`);
-      setLoading(false);
-      setShowManualInput(true);
-      return;
-    }
-    
-    // Check for restricted protocols
-    const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'moz-extension:', 'file:'];
-    if (restrictedProtocols.some(protocol => url.startsWith(protocol))) {
-      addDebugInfo(`⛔ Restricted protocol detected: ${url}`);
-      setError("Cannot analyze browser internal pages. Please navigate to a regular website or enter a URL manually.");
-      setLoading(false);
-      setShowManualInput(true);
-      return;
-    }
-    
-    // Normalize URL
-    if (!urlObj.pathname || urlObj.pathname === "") {
-      urlObj.pathname = "/";
-    }
-    const finalUrl = urlObj.toString();
-    addDebugInfo(`🎯 Final URL for API: "${finalUrl}"`);
-    
-    // Prepare API request
-    const requestData = {
-      url: finalUrl,
-      simplifiedPolicy: "This site uses cookies and collects emails encrypted no data sharing gdpr privacy focused",
-    };
-    
-    addDebugInfo(`📤 Sending to backend: ${JSON.stringify(requestData)}`);
-    
-    // Send to backend
-    axios.post("http://localhost:5000/api/sites/analyze", requestData)
-      .then((response) => {
-        addDebugInfo(`✅ Analysis complete!`);
-        const site = response.data.site;
-        site.trackers = categorizeTrackers(site.trackers || []);
-        setSiteData(site);
-        setLoading(false);
-        setShowManualInput(false); // Hide manual input on success
-      })
-      .catch((err) => {
-        addDebugInfo(`❌ Backend error: ${err.message}`);
-        console.error("Full error:", err);
-        setError(`Analysis failed: ${err.response?.data?.message || err.message}`);
-        setLoading(false);
-        setShowManualInput(true); // Show manual input on error
-      });
-  };
+  }, [analyzeUrl]); // Now includeanalyzeUrl in the dependency array
 
   const handleManualSubmit = () => {
     analyzeUrl(manualUrl, false);
@@ -342,26 +349,26 @@ function App() {
   if (loading && !showManualInput) {
     return (
       <div className="w-[400px] p-4 bg-gray-50">
-        <div className="flex items-center mb-4">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-          <span>Detecting current website...</span>
-        </div>
-        
-        <div className="text-xs bg-gray-100 p-2 rounded max-h-32 overflow-y-auto font-mono">
-          {debugInfo.map((info, index) => (
-            <div key={index} className="mb-1">{info}</div>
-          ))}
+        <div className="flex items-center justify-center mb-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
+          <span className="text-gray-700">Analyzing current website...</span>
         </div>
 
-        <button 
-          onClick={() => {
-            setShowManualInput(true);
-            setLoading(false);
-          }}
-          className="w-full mt-3 bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600"
-        >
-          Skip to Manual Input
-        </button>
+        <div className="text-center">
+          <p className="text-sm text-gray-600 mb-4">
+            Detecting trackers and analyzing privacy practices...
+          </p>
+
+          <button
+            onClick={() => {
+              setShowManualInput(true);
+              setLoading(false);
+            }}
+            className="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600 transition-colors"
+          >
+            Enter URL Manually
+          </button>
+        </div>
       </div>
     );
   }
@@ -371,61 +378,76 @@ function App() {
     return (
       <div className="w-[400px] p-4 bg-gray-50">
         {error && (
-          <div className="text-red-600 font-bold mb-4">❌ {error}</div>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4">
+            <div className="flex items-center">
+              <span className="text-red-500 mr-2">⚠️</span>
+              <span className="font-medium">Error:</span>
+            </div>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
         )}
-        
-        <div className={error ? "mb-4" : "text-blue-600 font-bold mb-4"}>
-          {error ? "🔄 Try Manual Input:" : "🛡️ DataGuardian Privacy Analysis"}
+
+        <div className="text-center mb-4">
+          <h1 className="text-xl font-bold text-gray-800 mb-2">
+            🛡️ DataGuardian
+          </h1>
+          <p className="text-sm text-gray-600">Privacy Analysis Tool</p>
         </div>
-        
+
         <div className="mb-4">
-          <p className="text-sm mb-3">
-            Enter a website URL to analyze its privacy practices:
-          </p>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Website URL to Analyze:
+          </label>
           <input
             type="text"
             value={manualUrl}
             onChange={(e) => setManualUrl(e.target.value)}
             placeholder="Enter URL (e.g. leetcode.com)"
-            className="w-full p-2 border rounded text-sm"
-            onKeyPress={(e) => e.key === 'Enter' && handleManualSubmit()}
+            className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onKeyPress={(e) => e.key === "Enter" && handleManualSubmit()}
           />
           <button
             onClick={handleManualSubmit}
             disabled={!manualUrl.trim() || loading}
-            className={`w-full mt-2 px-4 py-2 rounded text-sm transition-colors ${
+            className={`w-full mt-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
               manualUrl.trim() && !loading
-                ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? "bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
             {loading ? (
-              <>
-                <div className="inline-block animate-spin rounded-full h-3 w-3 border-b border-white mr-2"></div>
-                Analyzing...
-              </>
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Analyzing Privacy...
+              </div>
             ) : (
-              '🔍 Analyze Website Privacy'
+              "🔍 Analyze Website Privacy"
             )}
           </button>
         </div>
 
-        <div className="mb-4">
-          <h3 className="font-bold text-sm mb-2">Debug Log:</h3>
-          <div className="text-xs bg-gray-100 p-2 rounded max-h-32 overflow-y-auto font-mono">
-            {debugInfo.map((info, index) => (
-              <div key={index} className="mb-1">{info}</div>
-            ))}
+        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+          <h4 className="font-medium text-blue-800 mb-2">💡 Example URLs:</h4>
+          <div className="space-y-1">
+            <button
+              onClick={() => setManualUrl("leetcode.com")}
+              className="block text-left text-xs text-blue-600 hover:text-blue-800 font-mono bg-blue-100 px-2 py-1 rounded w-full"
+            >
+              leetcode.com
+            </button>
+            <button
+              onClick={() => setManualUrl("github.com")}
+              className="block text-left text-xs text-blue-600 hover:text-blue-800 font-mono bg-blue-100 px-2 py-1 rounded w-full"
+            >
+              github.com
+            </button>
+            <button
+              onClick={() => setManualUrl("stackoverflow.com")}
+              className="block text-left text-xs text-blue-600 hover:text-blue-800 font-mono bg-blue-100 px-2 py-1 rounded w-full"
+            >
+              stackoverflow.com
+            </button>
           </div>
-        </div>
-
-        <div className="text-sm bg-blue-50 p-3 rounded">
-          <h4 className="font-bold mb-2">💡 Examples:</h4>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li><code>leetcode.com</code></li>
-            <li><code>https://github.com</code></li>
-            <li><code>stackoverflow.com</code></li>
-          </ul>
         </div>
       </div>
     );
@@ -440,12 +462,12 @@ function App() {
         ) : (
           <FullReportView siteData={siteData} onNavigate={navigateTo} />
         )}
-        
+
         {/* Add a small button to analyze a different site */}
-        <div className="p-2 border-t">
-          <button 
+        <div className="p-2 border-t bg-white">
+          <button
             onClick={resetToManualInput}
-            className="w-full text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+            className="w-full text-xs bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded transition-colors"
           >
             🔄 Analyze Different Website
           </button>
@@ -454,7 +476,19 @@ function App() {
     );
   }
 
-  return <div className="p-4">Something went wrong</div>;
+  return (
+    <div className="w-[400px] p-4 bg-gray-50">
+      <div className="text-center">
+        <p className="text-gray-600">Something went wrong. Please try again.</p>
+        <button
+          onClick={resetToManualInput}
+          className="mt-2 bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"
+        >
+          Restart
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default App;
