@@ -14,12 +14,20 @@
     "tabs",
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "contentSettings",
+    "notifications",
+    "webNavigation",
+    "cookies"
   ],
 
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "background.js"
+  },
 
   "action": {
     "default_icon": {
@@ -28,7 +36,7 @@
       "128": "extensionHome.png"
     },
     "default_popup": "index.html",
-    "default_title": "DataGuardian"
+    "default_title": "DataGuardian Privacy Controls"
   },
 
   "content_security_policy": {
@@ -40,5 +48,15 @@
       "resources": ["*.js", "*.css", "*.html"],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "privacy_rules",
+        "enabled": true,
+        "path": "privacy_rules.json"
+      }
+    ]
+  }
 }

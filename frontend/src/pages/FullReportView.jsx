@@ -34,7 +34,7 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
         trackerCount={trackerCount}
       />
 
-      <PrivacyControls permissions={permissions} />
+      <PrivacyControls permissions={permissions} url={url} />
 
       <AnalysisSummary
         score={score}
