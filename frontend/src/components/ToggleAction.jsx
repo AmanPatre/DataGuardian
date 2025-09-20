@@ -34,6 +34,21 @@ const ToggleAction = ({
       // Show feedback to user
       const action = newState ? "enabled" : "disabled";
       console.log(`Privacy setting ${action}: ${label}`);
+      
+      // Show visual feedback with enhanced notification
+      if (typeof chrome !== "undefined" && chrome.notifications) {
+        const iconColor = newState ? "🛡️" : "⚠️";
+        const message = newState 
+          ? `Enhanced privacy protection activated for ${label.toLowerCase()}`
+          : `Privacy protection disabled for ${label.toLowerCase()}`;
+        
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "extensionHome.png",
+          title: `${iconColor} DataGuardian Privacy`,
+          message: message,
+        });
+      }
     } catch (error) {
       // Revert state on error
       setIsOn(!newState);
@@ -55,8 +70,12 @@ const ToggleAction = ({
 
   return (
     <div
-      className={`flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-200 ${
-        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+      className={`flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border transition-all duration-300 ${
+        disabled 
+          ? "opacity-50 cursor-not-allowed border-gray-200" 
+          : isOn 
+          ? "cursor-pointer border-green-200 bg-green-50 shadow-md" 
+          : "cursor-pointer border-gray-200 hover:border-blue-200 hover:bg-blue-50"
       }`}
     >
       <div className="flex items-center gap-3 flex-1">
@@ -95,16 +114,30 @@ const ToggleAction = ({
       </button>
 
       {/* Status indicator */}
-      <div className="ml-2 w-2 h-2 rounded-full">
-        <div
-          className={`w-full h-full rounded-full transition-colors duration-300 ${
-            isLoading
-              ? "bg-yellow-400 animate-pulse"
-              : isOn
-              ? "bg-green-400"
-              : "bg-gray-300"
-          }`}
-        ></div>
+      <div className="ml-2 flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full">
+          <div
+            className={`w-full h-full rounded-full transition-colors duration-300 ${
+              isLoading
+                ? "bg-yellow-400 animate-pulse"
+                : isOn
+                ? "bg-green-400"
+                : "bg-gray-300"
+            }`}
+          ></div>
+        </div>
+        
+        {/* Security improvement indicator */}
+        {isOn && !disabled && (
+          <div className="text-xs text-green-600 font-medium animate-pulse">
+            🛡️ Protected
+          </div>
+        )}
+        {!isOn && !disabled && (
+          <div className="text-xs text-gray-500">
+            ⚠️ Unprotected
+          </div>
+        )}
       </div>
     </div>
   );

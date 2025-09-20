@@ -6,41 +6,59 @@ class PrivacyManager {
     this.loadSettings();
   }
 
-  // Load current privacy settings from storage
-  async loadSettings() {
+  // Load current privacy settings from storage for specific site
+  async loadSettings(siteUrl = null) {
     if (!this.isExtension) {
       this.settings = this.getDefaultSettings();
       return;
     }
 
     try {
+      // Get current tab URL if not provided
+      if (!siteUrl) {
+        const [tab] = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+        siteUrl = tab?.url;
+      }
+
+      // Get domain for site-specific storage
+      const domain = this.getDomainFromUrl(siteUrl);
+      const storageKey = `privacySettings_${domain}`;
+
       const result = await new Promise((resolve) => {
-        chrome.storage.local.get(['privacySettings'], (result) => {
+        chrome.storage.local.get([storageKey], (result) => {
           resolve(result);
         });
       });
 
-      this.settings = result.privacySettings || {
-        blockNotifications: false,
-        blockCookies: false,
-        blockTrackers: false,
-        blockAdTrackers: true,
-        blockAnalyticsTrackers: true,
-        blockSocialTrackers: false
-      };
+      this.settings = result[storageKey] || this.getDefaultSettings();
+      console.log(`📋 Loaded settings for ${domain}:`, this.settings);
     } catch (error) {
       console.error('Failed to load privacy settings:', error);
       this.settings = this.getDefaultSettings();
     }
   }
 
-  // Save settings to storage
-  async saveSettings() {
+  // Save settings to storage for specific site
+  async saveSettings(siteUrl = null) {
     if (!this.isExtension) return;
 
     try {
+      // Get current tab URL if not provided
+      if (!siteUrl) {
+        const [tab] = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+        siteUrl = tab?.url;
+      }
+
+      // Get domain for site-specific storage
+      const domain = this.getDomainFromUrl(siteUrl);
+      const storageKey = `privacySettings_${domain}`;
+
       await new Promise((resolve, reject) => {
-        chrome.storage.local.set({ privacySettings: this.settings }, () => {
+        chrome.storage.local.set({ [storageKey]: this.settings }, () => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
@@ -48,19 +66,33 @@ class PrivacyManager {
           }
         });
       });
+
+      console.log(`💾 Saved settings for ${domain}:`, this.settings);
     } catch (error) {
       console.error('Failed to save privacy settings:', error);
     }
   }
 
-  // Get default settings
+  // Helper function to extract domain from URL
+  getDomainFromUrl(url) {
+    if (!url || !url.startsWith('http')) {
+      return 'unknown';
+    }
+    try {
+      return new URL(url).hostname;
+    } catch (error) {
+      return 'unknown';
+    }
+  }
+
+  // Get default settings - ALLOW ALL by default (user must opt-in to blocking)
   getDefaultSettings() {
     return {
       blockNotifications: false,
       blockCookies: false,
       blockTrackers: false,
-      blockAdTrackers: true,
-      blockAnalyticsTrackers: true,
+      blockAdTrackers: false,
+      blockAnalyticsTrackers: false,
       blockSocialTrackers: false
     };
   }
@@ -70,26 +102,37 @@ class PrivacyManager {
     return this.settings[key] || false;
   }
 
-  // Update a specific setting
-  async updateSetting(key, value) {
+  // Update a specific setting for current site
+  async updateSetting(key, value, siteUrl = null) {
     this.settings[key] = value;
-    await this.saveSettings();
+    await this.saveSettings(siteUrl);
 
-    // Apply the setting immediately
-    await this.applySetting(key, value);
+    // Apply the setting immediately to current tab
+    await this.applySetting(key, value, siteUrl);
 
     // Notify other parts of the extension
     this.notifySettingChanged(key, value);
   }
 
   // Apply specific privacy setting
-  async applySetting(key, enabled) {
+  async applySetting(key, enabled, siteUrl = null) {
     if (!this.isExtension) return;
 
     try {
-      const [tab] = await new Promise((resolve) => {
-        chrome.tabs.query({ active: true, currentWindow: true }, resolve);
-      });
+      let tab;
+      if (siteUrl) {
+        // Find tab by URL
+        const tabs = await new Promise((resolve) => {
+          chrome.tabs.query({}, resolve);
+        });
+        tab = tabs.find(t => t.url === siteUrl);
+      } else {
+        // Get current active tab
+        const [activeTab] = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+        tab = activeTab;
+      }
 
       if (!tab || !tab.id) return;
 
