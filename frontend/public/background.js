@@ -23,29 +23,89 @@ class DataGuardianBackground {
     console.log('DataGuardian Background Script Ready');
   }
 
-  // Load privacy settings from storage
-  async loadSettings() {
+  // Load privacy settings from storage for specific site
+  async loadSettings(siteUrl = null) {
     try {
-      const result = await chrome.storage.local.get(['privacySettings']);
-      this.settings = result.privacySettings || {
+      if (!siteUrl) {
+        // Default settings for new sites
+        this.settings = {
+          blockNotifications: false,
+          blockCookies: false,
+          blockTrackers: false,
+          blockAdTrackers: false,
+          blockAnalyticsTrackers: false,
+          blockSocialTrackers: false
+        };
+        console.log('🆕 Using default settings (allow all)');
+        return;
+      }
+
+      const domain = this.getDomainFromUrl(siteUrl);
+      const storageKey = `privacySettings_${domain}`;
+      const result = await chrome.storage.local.get([storageKey]);
+
+      if (result[storageKey]) {
+        this.settings = {
+          blockNotifications: false,
+          blockCookies: false,
+          blockTrackers: false,
+          blockAdTrackers: false,
+          blockAnalyticsTrackers: false,
+          blockSocialTrackers: false,
+          ...result[storageKey] // Override with saved settings for this site
+        };
+        console.log(`📋 Loaded settings for ${domain}:`, this.settings);
+      } else {
+        // No saved settings for this site - use defaults
+        this.settings = {
+          blockNotifications: false,
+          blockCookies: false,
+          blockTrackers: false,
+          blockAdTrackers: false,
+          blockAnalyticsTrackers: false,
+          blockSocialTrackers: false
+        };
+        console.log(`🆕 No saved settings for ${domain} - using defaults`);
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+      // Fallback to defaults
+      this.settings = {
         blockNotifications: false,
         blockCookies: false,
         blockTrackers: false,
-        blockAdTrackers: true,
-        blockAnalyticsTrackers: true,
+        blockAdTrackers: false,
+        blockAnalyticsTrackers: false,
         blockSocialTrackers: false
       };
-      console.log('Loaded settings:', this.settings);
-    } catch (error) {
-      console.error('Failed to load settings:', error);
     }
   }
 
-  // Save settings to storage
-  async saveSettings() {
+  // Helper function to extract domain from URL
+  getDomainFromUrl(url) {
+    if (!url || !url.startsWith('http')) {
+      return 'unknown';
+    }
     try {
-      await chrome.storage.local.set({ privacySettings: this.settings });
-      console.log('Settings saved:', this.settings);
+      return new URL(url).hostname;
+    } catch (error) {
+      return 'unknown';
+    }
+  }
+
+  // Save settings to storage for specific site
+  async saveSettings(siteUrl = null) {
+    try {
+      if (!siteUrl) {
+        console.log('No site URL provided for saving settings');
+        return;
+      }
+
+      const domain = this.getDomainFromUrl(siteUrl);
+      const storageKey = `privacySettings_${domain}`;
+
+      await chrome.storage.local.set({ [storageKey]: this.settings });
+      console.log(`💾 Settings saved for ${domain}:`, this.settings);
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
@@ -67,9 +127,11 @@ class DataGuardianBackground {
       }
     });
 
-    // Listen for tab updates to apply settings
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // Listen for tab updates to apply site-specific settings
+    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' && tab.url) {
+        // Load settings for this specific site
+        await this.loadSettings(tab.url);
         this.applySettingsToTab(tab);
       }
     });
@@ -87,11 +149,15 @@ class DataGuardianBackground {
     try {
       switch (request.type) {
         case 'GET_SETTINGS':
+          // Load settings for the requesting tab's site
+          if (sender.tab && sender.tab.url) {
+            await this.loadSettings(sender.tab.url);
+          }
           sendResponse({ success: true, settings: this.settings });
           break;
 
         case 'UPDATE_SETTING':
-          await this.updateSetting(request.setting, request.value);
+          await this.updateSetting(request.setting, request.value, sender.tab?.url);
           sendResponse({ success: true });
           break;
 
@@ -106,6 +172,16 @@ class DataGuardianBackground {
           sendResponse({ success: true });
           break;
 
+        case 'RESET_TO_DEFAULTS':
+          await this.resetToDefaults();
+          sendResponse({ success: true });
+          break;
+
+        case 'CLEAR_ALL_SETTINGS':
+          await this.clearAllSettings();
+          sendResponse({ success: true });
+          break;
+
         default:
           sendResponse({ success: false, error: 'Unknown message type' });
       }
@@ -115,20 +191,65 @@ class DataGuardianBackground {
     }
   }
 
-  // Update a specific setting
-  async updateSetting(settingKey, value) {
+  // Update a specific setting for a specific site
+  async updateSetting(settingKey, value, siteUrl = null) {
+    if (!siteUrl) {
+      console.log('No site URL provided for updating setting');
+      return;
+    }
+
+    // Load current settings for this site
+    await this.loadSettings(siteUrl);
+
+    // Update the setting
     this.settings[settingKey] = value;
+    await this.saveSettings(siteUrl);
+
+    // Apply the setting only to tabs of the same domain
+    try {
+      const domain = this.getDomainFromUrl(siteUrl);
+      const tabs = await chrome.tabs.query({});
+
+      tabs.forEach(tab => {
+        if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+          const tabDomain = this.getDomainFromUrl(tab.url);
+          if (tabDomain === domain) {
+            this.applySettingToTab(tab, settingKey, value).catch(error => {
+              console.log(`Could not apply setting to tab ${tab.id}:`, error.message);
+            });
+          }
+        }
+      });
+    } catch (error) {
+      console.log('Could not query tabs:', error.message);
+    }
+
+    console.log(`Updated setting ${settingKey} to ${value} for ${this.getDomainFromUrl(siteUrl)}`);
+  }
+
+  // Reset all settings to defaults
+  async resetToDefaults() {
+    this.settings = {
+      blockNotifications: false,
+      blockCookies: false,
+      blockTrackers: false,
+      blockAdTrackers: false,
+      blockAnalyticsTrackers: false,
+      blockSocialTrackers: false
+    };
     await this.saveSettings();
+    console.log('🔄 Reset all settings to defaults (allow all)');
+  }
 
-    // Apply the setting to all tabs
-    const tabs = await chrome.tabs.query({});
-    tabs.forEach(tab => {
-      if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
-        this.applySettingToTab(tab, settingKey, value);
-      }
-    });
-
-    console.log(`Updated setting ${settingKey} to ${value}`);
+  // Clear all saved settings and start fresh
+  async clearAllSettings() {
+    try {
+      await chrome.storage.local.clear();
+      await this.loadSettings();
+      console.log('🗑️ Cleared all saved settings - starting fresh with defaults');
+    } catch (error) {
+      console.error('Failed to clear settings:', error);
+    }
   }
 
   // Set up request blocking using declarativeNetRequest API
@@ -201,6 +322,7 @@ class DataGuardianBackground {
             }
           });
         });
+        console.log(`Added ${trackerDomains.ad.length} ad tracker blocking rules`);
       }
 
       if (this.settings.blockAnalyticsTrackers) {
@@ -215,6 +337,7 @@ class DataGuardianBackground {
             }
           });
         });
+        console.log(`Added ${trackerDomains.analytics.length} analytics tracker blocking rules`);
       }
 
       if (this.settings.blockSocialTrackers) {
@@ -229,6 +352,7 @@ class DataGuardianBackground {
             }
           });
         });
+        console.log(`Added ${trackerDomains.social.length} social tracker blocking rules`);
       }
 
       // Add comprehensive tracker blocking if enabled
@@ -252,6 +376,7 @@ class DataGuardianBackground {
             });
           }
         });
+        console.log(`Added comprehensive tracker blocking rules`);
       }
 
       // Apply new rules
@@ -259,7 +384,19 @@ class DataGuardianBackground {
         await chrome.declarativeNetRequest.updateDynamicRules({
           addRules: newRules
         });
-        console.log(`Updated blocking rules: ${newRules.length} rules active`);
+        console.log(`🛡️ DataGuardian: Updated blocking rules - ${newRules.length} rules active`);
+
+        // Show notification about active protection
+        if (chrome.notifications) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'extensionHome.png',
+            title: '🛡️ DataGuardian Protection Active',
+            message: `Now blocking ${newRules.length} tracking domains for enhanced privacy`
+          });
+        }
+      } else {
+        console.log('🔓 DataGuardian: All tracker blocking disabled - allowing all trackers');
       }
 
     } catch (error) {
@@ -269,11 +406,18 @@ class DataGuardianBackground {
 
   // Apply settings to a specific tab
   async applySettingsToTab(tab) {
-    if (!tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
+    if (!tab || !tab.url || (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))) {
       return;
     }
 
     try {
+      // Check if tab still exists before applying settings
+      const currentTab = await chrome.tabs.get(tab.id).catch(() => null);
+      if (!currentTab) {
+        console.log(`Tab ${tab.id} no longer exists, skipping settings application`);
+        return;
+      }
+
       // Apply notification blocking
       if (this.settings.blockNotifications) {
         await chrome.scripting.executeScript({
@@ -333,8 +477,14 @@ class DataGuardianBackground {
       await this.setupRequestBlocking();
     }
 
-    // Apply other settings
-    await this.applySettingsToTab(tab);
+    // Apply other settings only if tab exists
+    if (tab && tab.id) {
+      try {
+        await this.applySettingsToTab(tab);
+      } catch (error) {
+        console.log(`Could not apply settings to tab ${tab.id}:`, error.message);
+      }
+    }
   }
 
   // Handle site changes

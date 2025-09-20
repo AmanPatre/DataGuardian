@@ -14,7 +14,6 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const {
-    score = "N/A",
     summary = "No summary available.",
     url = "Unknown site",
     simplifiedPolicy = "",
@@ -23,12 +22,13 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     grade = "F",
   } = siteData;
 
-  // Load current tracker blocking settings
+  // Load current tracker blocking settings for this specific site
   useEffect(() => {
     const loadTrackerSettings = async () => {
       setIsLoading(true);
       try {
-        await privacyManager.loadSettings();
+        // Load settings for the current site (using siteData.url)
+        await privacyManager.loadSettings(siteData.url || url);
 
         const settings = {
           blockAdTrackers: privacyManager.getSetting("blockAdTrackers"),
@@ -39,12 +39,16 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
         };
 
         setTrackerSettings(settings);
+        console.log(
+          `📋 Loaded site-specific settings for ${getHostname(url)}:`,
+          settings
+        );
       } catch (error) {
         console.error("Failed to load tracker settings:", error);
-        // Fallback to default settings
+        // Fallback to default settings - ALLOW ALL by default
         setTrackerSettings({
-          blockAdTrackers: true,
-          blockAnalyticsTrackers: true,
+          blockAdTrackers: false,
+          blockAnalyticsTrackers: false,
           blockSocialTrackers: false,
         });
       } finally {
@@ -53,7 +57,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     };
 
     loadTrackerSettings();
-  }, [privacyManager]);
+  }, [privacyManager, siteData.url, url]);
 
   // Listen for setting changes
   useEffect(() => {
@@ -73,10 +77,15 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     };
   }, []);
 
-  // Handle tracker toggle
+  // Handle tracker toggle for this specific site
   const handleTrackerToggle = async (enabled, settingKey) => {
     try {
-      await privacyManager.updateSetting(settingKey, enabled);
+      // Update setting for current site
+      await privacyManager.updateSetting(
+        settingKey,
+        enabled,
+        siteData.url || url
+      );
 
       // Show notification with specific details
       const trackerTypes = {
@@ -87,9 +96,10 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
 
       const trackerType = trackerTypes[settingKey];
       const action = enabled ? "blocking" : "allowing";
+      const siteName = getHostname(url);
 
       privacyManager.showPrivacyNotification(
-        `Now ${action} ${trackerType} trackers on this site`
+        `Now ${action} ${trackerType} trackers on ${siteName}`
       );
 
       // Update local state
@@ -97,6 +107,8 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
         ...prev,
         [settingKey]: enabled,
       }));
+
+      console.log(`🔄 Updated ${settingKey} to ${enabled} for ${siteName}`);
     } catch (error) {
       console.error(`Failed to toggle ${settingKey}:`, error);
       throw error;
@@ -109,7 +121,12 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       (trackers.ad || 0) + (trackers.analytics || 0) + (trackers.social || 0);
 
     if (totalTrackers === 0) {
-      return { improvement: 0, message: "No trackers detected" };
+      return {
+        improvement: 0,
+        message: "No trackers detected",
+        level: "none",
+        color: "gray",
+      };
     }
 
     const blockedEstimate =
@@ -119,12 +136,30 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
 
     const improvement = Math.round((blockedEstimate / totalTrackers) * 100);
 
+    let level = "minimal";
+    let color = "red";
+
+    if (improvement >= 75) {
+      level = "excellent";
+      color = "green";
+    } else if (improvement >= 50) {
+      level = "good";
+      color = "blue";
+    } else if (improvement >= 25) {
+      level = "moderate";
+      color = "yellow";
+    }
+
     return {
       improvement,
       message:
         improvement > 0
           ? `Blocking ${blockedEstimate}/${totalTrackers} trackers (${improvement}% protection)`
           : "Enable blocking to improve privacy",
+      level,
+      color,
+      blockedCount: blockedEstimate,
+      totalCount: totalTrackers,
     };
   };
 
@@ -135,7 +170,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     try {
       if (!urlString || urlString === "Unknown site") return "this site";
       return new URL(urlString).hostname;
-    } catch (error) {
+    } catch {
       return "this site";
     }
   };
@@ -175,16 +210,58 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       </div>
 
       {/* Privacy Status */}
-      <div className="bg-gradient-to-r from-blue-50 to-green-50 p-3 rounded-lg border border-blue-200">
+      <div
+        className={`bg-gradient-to-r p-3 rounded-lg border transition-all duration-500 ${
+          privacyStats.color === "green"
+            ? "from-green-50 to-emerald-50 border-green-200"
+            : privacyStats.color === "blue"
+            ? "from-blue-50 to-cyan-50 border-blue-200"
+            : privacyStats.color === "yellow"
+            ? "from-yellow-50 to-orange-50 border-yellow-200"
+            : "from-red-50 to-pink-50 border-red-200"
+        }`}
+      >
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-gray-800">
-              Privacy Protection
+              Privacy Protection Level
             </p>
             <p className="text-xs text-gray-600">{privacyStats.message}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <span
+                className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  privacyStats.color === "green"
+                    ? "bg-green-100 text-green-700"
+                    : privacyStats.color === "blue"
+                    ? "bg-blue-100 text-blue-700"
+                    : privacyStats.color === "yellow"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                {privacyStats.level.charAt(0).toUpperCase() +
+                  privacyStats.level.slice(1)}
+              </span>
+              {privacyStats.improvement > 0 && (
+                <span className="text-xs text-gray-500">
+                  🛡️ {privacyStats.blockedCount} of {privacyStats.totalCount}{" "}
+                  blocked
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold text-blue-600">
+            <div
+              className={`text-2xl font-bold transition-colors duration-500 ${
+                privacyStats.color === "green"
+                  ? "text-green-600"
+                  : privacyStats.color === "blue"
+                  ? "text-blue-600"
+                  : privacyStats.color === "yellow"
+                  ? "text-yellow-600"
+                  : "text-red-600"
+              }`}
+            >
               {privacyStats.improvement}%
             </div>
             <div className="text-xs text-gray-500">Protected</div>
@@ -230,18 +307,49 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
         </div>
 
         {/* Tracker Summary */}
-        <div className="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600">
-          <div className="flex justify-between items-center">
-            <span>Total Trackers Found:</span>
-            <span className="font-semibold">
+        <div
+          className={`mt-3 p-3 rounded-lg border transition-all duration-300 ${
+            privacyStats.improvement > 0
+              ? "bg-green-50 border-green-200"
+              : "bg-gray-50 border-gray-200"
+          }`}
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-medium text-gray-700">
+              Total Trackers Found:
+            </span>
+            <span className="font-bold text-gray-900">
               {(trackers.ad || 0) +
                 (trackers.analytics || 0) +
                 (trackers.social || 0)}
             </span>
           </div>
-          {privacyStats.improvement > 0 && (
-            <div className="mt-1 text-green-600">
-              ✓ {privacyStats.improvement}% of trackers will be blocked
+
+          {privacyStats.improvement > 0 ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-green-700">
+                <span className="text-sm">🛡️</span>
+                <span className="text-xs font-medium">
+                  {privacyStats.improvement}% protection active
+                </span>
+              </div>
+              <div className="text-xs text-green-600">
+                Blocking {privacyStats.blockedCount} of{" "}
+                {privacyStats.totalCount} trackers
+              </div>
+              <div className="w-full bg-green-200 rounded-full h-1.5 mt-2">
+                <div
+                  className="bg-green-500 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${privacyStats.improvement}%` }}
+                ></div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-gray-600">
+              <span className="text-sm">⚠️</span>
+              <span className="text-xs">
+                Enable tracker blocking to improve privacy
+              </span>
             </div>
           )}
         </div>
