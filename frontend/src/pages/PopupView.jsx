@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from "react";
-import Header from "../components/Header";
-import ToggleAction from "../components/ToggleAction";
+import ModernHeader from "../components/ModernHeader";
+import ModernToggle from "../components/ModernToggle";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ProgressIndicator from "../components/ProgressIndicator";
 import { PrivacyManager } from "../utils/privacyManager";
 import {
   BugAntIcon,
   ChartPieIcon,
   ShareIcon,
+  BoltIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 const PopupView = ({ siteData = {}, onNavigate }) => {
   const [privacyManager] = useState(new PrivacyManager());
   const [trackerSettings, setTrackerSettings] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isAnalyzing] = useState(false);
+  const [analysisProgress] = useState(1);
 
   const {
     summary = "No summary available.",
@@ -177,141 +183,173 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
 
   if (isLoading) {
     return (
-      <div className="p-4 flex flex-col gap-4">
-        <Header score={grade} />
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
-          <span className="text-gray-700">Loading privacy controls...</span>
+      <div className="min-h-[400px] flex flex-col">
+        <ModernHeader score={grade} isAnalyzing={isAnalyzing} />
+        <div className="flex-1 p-4">
+          <LoadingSpinner message="Loading privacy controls..." size="medium" />
+          {isAnalyzing && (
+            <div className="mt-4">
+              <ProgressIndicator
+                currentStep={analysisProgress}
+                totalSteps={3}
+                steps={[
+                  "Detecting Trackers",
+                  "Analyzing Privacy",
+                  "Loading Settings",
+                ]}
+                isVisible={true}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 flex flex-col gap-4">
-      <Header score={grade} />
+    <div className="min-h-[500px] flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
+      <ModernHeader score={grade} isAnalyzing={isAnalyzing} />
 
-      {/* Summary Section */}
-      <div>
-        <p className="text-sm text-gray-600 leading-relaxed">
-          {summary} on{" "}
-          <strong className="font-semibold text-gray-900">
-            {getHostname(url)}
-          </strong>
-        </p>
-        {simplifiedPolicy && (
-          <p className="mt-2 text-xs italic text-gray-500">
-            {simplifiedPolicy}
-          </p>
-        )}
-        <p className="mt-1 text-xs text-gray-700 font-semibold">
-          Category: {category}
-        </p>
-      </div>
-
-      {/* Privacy Status */}
-      <div
-        className={`bg-gradient-to-r p-3 rounded-lg border transition-all duration-500 ${
-          privacyStats.color === "green"
-            ? "from-green-50 to-emerald-50 border-green-200"
-            : privacyStats.color === "blue"
-            ? "from-blue-50 to-cyan-50 border-blue-200"
-            : privacyStats.color === "yellow"
-            ? "from-yellow-50 to-orange-50 border-yellow-200"
-            : "from-red-50 to-pink-50 border-red-200"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">
-              Privacy Protection Level
-            </p>
-            <p className="text-xs text-gray-600">{privacyStats.message}</p>
-            <div className="mt-1 flex items-center gap-2">
-              <span
-                className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  privacyStats.color === "green"
-                    ? "bg-green-100 text-green-700"
-                    : privacyStats.color === "blue"
-                    ? "bg-blue-100 text-blue-700"
-                    : privacyStats.color === "yellow"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {privacyStats.level.charAt(0).toUpperCase() +
-                  privacyStats.level.slice(1)}
-              </span>
-              {privacyStats.improvement > 0 && (
-                <span className="text-xs text-gray-500">
-                  🛡️ {privacyStats.blockedCount} of {privacyStats.totalCount}{" "}
-                  blocked
+      <div className="flex-1 p-4 space-y-4">
+        {/* Summary Section */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-blue-100 rounded-xl">
+              <SparklesIcon className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {summary} on{" "}
+                <span className="font-semibold text-gray-900 bg-blue-50 px-2 py-1 rounded-lg">
+                  {getHostname(url)}
                 </span>
+              </p>
+              {simplifiedPolicy && (
+                <p className="mt-2 text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
+                  {simplifiedPolicy}
+                </p>
               )}
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-gray-500">Category:</span>
+                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  {category}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="text-right">
-            <div
-              className={`text-2xl font-bold transition-colors duration-500 ${
-                privacyStats.color === "green"
-                  ? "text-green-600"
-                  : privacyStats.color === "blue"
-                  ? "text-blue-600"
-                  : privacyStats.color === "yellow"
-                  ? "text-yellow-600"
-                  : "text-red-600"
-              }`}
-            >
-              {privacyStats.improvement}%
-            </div>
-            <div className="text-xs text-gray-500">Protected</div>
           </div>
         </div>
-      </div>
 
-      <hr className="border-gray-200" />
+        {/* Privacy Status */}
+        <div
+          className={`bg-white rounded-2xl border-2 p-4 shadow-sm transition-all duration-500 ${
+            privacyStats.color === "green"
+              ? "border-green-200 bg-gradient-to-br from-green-50 to-emerald-50"
+              : privacyStats.color === "blue"
+              ? "border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50"
+              : privacyStats.color === "yellow"
+              ? "border-yellow-200 bg-gradient-to-br from-yellow-50 to-orange-50"
+              : "border-red-200 bg-gradient-to-br from-red-50 to-pink-50"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                Privacy Protection Level
+              </p>
+              <p className="text-xs text-gray-600">{privacyStats.message}</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    privacyStats.color === "green"
+                      ? "bg-green-100 text-green-700"
+                      : privacyStats.color === "blue"
+                      ? "bg-blue-100 text-blue-700"
+                      : privacyStats.color === "yellow"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {privacyStats.level.charAt(0).toUpperCase() +
+                    privacyStats.level.slice(1)}
+                </span>
+                {privacyStats.improvement > 0 && (
+                  <span className="text-xs text-gray-500">
+                    🛡️ {privacyStats.blockedCount} of {privacyStats.totalCount}{" "}
+                    blocked
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="text-right">
+              <div
+                className={`text-2xl font-bold transition-colors duration-500 ${
+                  privacyStats.color === "green"
+                    ? "text-green-600"
+                    : privacyStats.color === "blue"
+                    ? "text-blue-600"
+                    : privacyStats.color === "yellow"
+                    ? "text-yellow-600"
+                    : "text-red-600"
+                }`}
+              >
+                {privacyStats.improvement}%
+              </div>
+              <div className="text-xs text-gray-500">Protected</div>
+            </div>
+          </div>
+        </div>
 
-      {/* Quick Actions Section */}
-      <div>
-        <h2 className="text-md font-bold text-gray-900 mb-2">
-          Tracker Blocking
-        </h2>
-        <div className="flex flex-col gap-3">
-          <ToggleAction
-            icon={<BugAntIcon className="w-6 h-6 text-red-500" />}
-            label={`Block Ad Trackers (${trackers.ad ?? 0})`}
-            description="Block advertising and marketing trackers"
-            initialState={trackerSettings.blockAdTrackers ?? false}
-            settingKey="blockAdTrackers"
-            onToggle={handleTrackerToggle}
-            disabled={trackers.ad === 0}
-          />
-          <ToggleAction
-            icon={<ChartPieIcon className="w-6 h-6 text-blue-500" />}
-            label={`Block Analytics Trackers (${trackers.analytics ?? 0})`}
-            description="Block website analytics and user behavior tracking"
-            initialState={trackerSettings.blockAnalyticsTrackers ?? false}
-            settingKey="blockAnalyticsTrackers"
-            onToggle={handleTrackerToggle}
-            disabled={trackers.analytics === 0}
-          />
-          <ToggleAction
-            icon={<ShareIcon className="w-6 h-6 text-indigo-500" />}
-            label={`Block Social Trackers (${trackers.social ?? 0})`}
-            description="Block social media widgets and tracking"
-            initialState={trackerSettings.blockSocialTrackers ?? false}
-            settingKey="blockSocialTrackers"
-            onToggle={handleTrackerToggle}
-            disabled={trackers.social === 0}
-          />
+        <hr className="border-gray-200" />
+
+        {/* Tracker Blocking Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BoltIcon className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-bold text-gray-900">
+              Tracker Blocking
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            <ModernToggle
+              icon={<BugAntIcon className="w-5 h-5" />}
+              label="Block Ad Trackers"
+              description="Block advertising and marketing trackers"
+              count={trackers.ad ?? 0}
+              initialState={trackerSettings.blockAdTrackers ?? false}
+              settingKey="blockAdTrackers"
+              onToggle={handleTrackerToggle}
+              disabled={trackers.ad === 0}
+            />
+            <ModernToggle
+              icon={<ChartPieIcon className="w-5 h-5" />}
+              label="Block Analytics Trackers"
+              description="Block website analytics and user behavior tracking"
+              count={trackers.analytics ?? 0}
+              initialState={trackerSettings.blockAnalyticsTrackers ?? false}
+              settingKey="blockAnalyticsTrackers"
+              onToggle={handleTrackerToggle}
+              disabled={trackers.analytics === 0}
+            />
+            <ModernToggle
+              icon={<ShareIcon className="w-5 h-5" />}
+              label="Block Social Trackers"
+              description="Block social media widgets and tracking"
+              count={trackers.social ?? 0}
+              initialState={trackerSettings.blockSocialTrackers ?? false}
+              settingKey="blockSocialTrackers"
+              onToggle={handleTrackerToggle}
+              disabled={trackers.social === 0}
+            />
+          </div>
         </div>
 
         {/* Tracker Summary */}
         <div
-          className={`mt-3 p-3 rounded-lg border transition-all duration-300 ${
+          className={`bg-white rounded-2xl border-2 p-4 shadow-sm transition-all duration-300 ${
             privacyStats.improvement > 0
-              ? "bg-green-50 border-green-200"
-              : "bg-gray-50 border-gray-200"
+              ? "border-green-200 bg-gradient-to-br from-green-50 to-emerald-50"
+              : "border-gray-200 bg-gray-50"
           }`}
         >
           <div className="flex justify-between items-center mb-2">
@@ -353,30 +391,37 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
             </div>
           )}
         </div>
-      </div>
 
-      <hr className="border-gray-200" />
+        {/* Footer Button */}
+        <button
+          onClick={() => onNavigate && onNavigate("fullReport")}
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-3 px-4 rounded-2xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 shadow-lg hover:shadow-xl"
+        >
+          View Full Privacy Report
+        </button>
 
-      {/* Footer Button */}
-      <button
-        onClick={() => onNavigate && onNavigate("fullReport")}
-        className="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-      >
-        View Full Privacy Report
-      </button>
-
-      {/* Extension Status */}
-      <div className="text-center">
-        <p className="text-xs text-gray-500">
-          DataGuardian Extension •
-          <span
-            className={`ml-1 ${
-              typeof chrome !== "undefined" ? "text-green-600" : "text-red-600"
-            }`}
-          >
-            {typeof chrome !== "undefined" ? "Active" : "Standalone Mode"}
-          </span>
-        </p>
+        {/* Extension Status */}
+        <div className="text-center bg-white rounded-xl border border-gray-200 p-3">
+          <div className="flex items-center justify-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                typeof chrome !== "undefined" ? "bg-green-400" : "bg-red-400"
+              }`}
+            ></div>
+            <p className="text-xs text-gray-600 font-medium">
+              DataGuardian Extension •
+              <span
+                className={`ml-1 font-semibold ${
+                  typeof chrome !== "undefined"
+                    ? "text-green-600"
+                    : "text-red-600"
+                }`}
+              >
+                {typeof chrome !== "undefined" ? "Active" : "Standalone Mode"}
+              </span>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

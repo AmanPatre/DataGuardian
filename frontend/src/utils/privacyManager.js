@@ -1,4 +1,6 @@
 // Privacy management utilities for browser extension
+import { cacheManager } from './cacheManager';
+
 class PrivacyManager {
   constructor() {
     this.isExtension = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;

@@ -1,12 +1,25 @@
 // backend/services/geminiService.js
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Simple in-memory cache for AI responses
+const aiCache = new Map();
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
 export async function generateAIPrivacySummary(trackers, url) {
   try {
+    // Check cache first
+    const cacheKey = `${url}_${trackers.sort().join(',')}`;
+    const cached = aiCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
+      console.log('🚀 Using cached AI analysis for:', url);
+      return cached.data;
+    }
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     if (!process.env.GEMINI_API_KEY) {
       console.warn("Gemini API key not found");
-      return {
+      const fallbackResponse = {
         success: false,
         note: "AI analysis unavailable - API key missing",
         summary: {
@@ -17,6 +30,14 @@ export async function generateAIPrivacySummary(trackers, url) {
           trackerBreakdown: [],
         },
       };
+
+      // Cache the fallback response too
+      aiCache.set(cacheKey, {
+        data: fallbackResponse,
+        timestamp: Date.now()
+      });
+
+      return fallbackResponse;
     }
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
@@ -56,8 +77,8 @@ Provide realistic assessments based on the actual trackers detected.
 `;
 
     const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
+    const aiResponse = result.response;
+    const text = aiResponse.text();
 
     // Try to parse JSON from the response
     let summary;
@@ -80,13 +101,21 @@ Provide realistic assessments based on the actual trackers detected.
     const validatedSummary = validateSummary(summary);
     const trackerDetails = buildTrackerDetails(trackers);
 
-    return {
+    const finalResponse = {
       success: true,
       summary: validatedSummary,
       trackerCount: trackers.length,
       trackerDetails,
       rawResponse: text, // For debugging
     };
+
+    // Cache the successful response
+    aiCache.set(cacheKey, {
+      data: finalResponse,
+      timestamp: Date.now()
+    });
+
+    return finalResponse;
   } catch (error) {
     console.error("Gemini AI error:", error.message);
 
