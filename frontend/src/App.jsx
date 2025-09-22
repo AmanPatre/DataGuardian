@@ -3,35 +3,23 @@ import PopupView from "./pages/PopupView";
 import FullReportView from "./pages/FullReportView";
 import axios from "axios";
 
-function categorizeTrackers(trackerDomains = []) {
-  const categories = { ad: 0, analytics: 0, social: 0 };
+/**
+ * [UPDATED] Processes the detailed tracker list from the backend.
+ * Instead of having its own logic, it now creates a summary count
+ * based on the categories provided by the backend's rule-based system.
+ * @param {Array<Object>} trackerDetails - The detailed list from response.data.aiSummary.trackerDetails.
+ * @returns {Object} An object with tracker counts, e.g., { Advertising: 3, Analytics: 5 }.
+ */
+function categorizeTrackers(trackerDetails = []) {
+  const categories = {};
 
-  trackerDomains.forEach((domain) => {
-    const d = domain.toLowerCase();
-    if (
-      d.includes("ads") ||
-      d.includes("doubleclick") ||
-      d.includes("adservice") ||
-      d.includes("adnxs")
-    ) {
-      categories.ad++;
-    } else if (
-      d.includes("analytics") ||
-      d.includes("googletagmanager") ||
-      d.includes("mixpanel") ||
-      d.includes("hotjar")
-    ) {
-      categories.analytics++;
-    } else if (
-      d.includes("facebook") ||
-      d.includes("sharethis") ||
-      d.includes("taboola") ||
-      d.includes("twitter")
-    ) {
-      categories.social++;
-    } else {
-      categories.analytics++;
+  (trackerDetails || []).forEach((detail) => {
+    // Use the category determined by the backend's classifyDomain function
+    const category = detail.category || "Unknown";
+    if (!categories[category]) {
+      categories[category] = 0;
     }
+    categories[category]++;
   });
 
   return categories;
@@ -128,7 +116,12 @@ function App() {
       .then((response) => {
         logInfo("Analysis complete!");
         const site = response.data.site;
-        site.trackers = categorizeTrackers(site.trackers || []);
+
+        // [UPDATE] Use the new dynamic categorization function.
+        // It processes the detailed tracker information from the AI summary.
+        const trackerDetails = response.data.aiSummary?.trackerDetails || [];
+        site.trackers = categorizeTrackers(trackerDetails);
+
         setSiteData(site);
         setLoading(false);
         setShowManualInput(false); // Hide manual input on success
