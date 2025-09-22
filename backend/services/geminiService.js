@@ -48,12 +48,9 @@ export async function generateAIPrivacySummary(trackers, url) {
         data: fallbackResponse,
         timestamp: Date.now()
       });
-
       return fallbackResponse;
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
+    const model = genAI.getGenerativeModel({model:"gemini-2.5-pro"});
     // Create a comprehensive prompt
     const prompt = `
 You are a privacy analysis expert. Analyze the following website and its trackers to provide a comprehensive privacy summary.
