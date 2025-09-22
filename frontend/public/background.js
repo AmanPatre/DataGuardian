@@ -158,6 +158,7 @@ class DataGuardianBackground {
 
         case 'UPDATE_SETTING':
           await this.updateSetting(request.setting, request.value, sender.tab?.url);
+          await this.setupRequestBlocking(); // Refresh rules on any setting change
           sendResponse({ success: true });
           break;
 
@@ -309,9 +310,8 @@ class DataGuardianBackground {
       const newRules = [];
       let ruleId = 1;
 
-      // Add rules for each category if enabled
-      if (this.settings.blockAdTrackers) {
-        trackerDomains.ad.forEach(domain => {
+      const addRulesForCategory = (category, domains) => {
+        domains.forEach(domain => {
           newRules.push({
             id: ruleId++,
             priority: 1,
@@ -322,61 +322,20 @@ class DataGuardianBackground {
             }
           });
         });
-        console.log(`Added ${trackerDomains.ad.length} ad tracker blocking rules`);
+        console.log(`Added ${domains.length} ${category} tracker blocking rules`);
+      };
+
+
+      if (this.settings.blockAdTrackers) {
+        addRulesForCategory('ad', trackerDomains.ad);
       }
 
       if (this.settings.blockAnalyticsTrackers) {
-        trackerDomains.analytics.forEach(domain => {
-          newRules.push({
-            id: ruleId++,
-            priority: 1,
-            action: { type: 'block' },
-            condition: {
-              urlFilter: domain,
-              resourceTypes: ['script', 'xmlhttprequest', 'image']
-            }
-          });
-        });
-        console.log(`Added ${trackerDomains.analytics.length} analytics tracker blocking rules`);
+        addRulesForCategory('analytics', trackerDomains.analytics);
       }
 
       if (this.settings.blockSocialTrackers) {
-        trackerDomains.social.forEach(domain => {
-          newRules.push({
-            id: ruleId++,
-            priority: 1,
-            action: { type: 'block' },
-            condition: {
-              urlFilter: domain,
-              resourceTypes: ['script', 'xmlhttprequest', 'image', 'sub_frame']
-            }
-          });
-        });
-        console.log(`Added ${trackerDomains.social.length} social tracker blocking rules`);
-      }
-
-      // Add comprehensive tracker blocking if enabled
-      if (this.settings.blockTrackers) {
-        const allTrackers = [
-          ...trackerDomains.ad,
-          ...trackerDomains.analytics,
-          ...trackerDomains.social
-        ];
-
-        allTrackers.forEach(domain => {
-          if (!newRules.find(rule => rule.condition.urlFilter === domain)) {
-            newRules.push({
-              id: ruleId++,
-              priority: 2,
-              action: { type: 'block' },
-              condition: {
-                urlFilter: domain,
-                resourceTypes: ['script', 'xmlhttprequest', 'image', 'sub_frame']
-              }
-            });
-          }
-        });
-        console.log(`Added comprehensive tracker blocking rules`);
+        addRulesForCategory('social', trackerDomains.social);
       }
 
       // Apply new rules
