@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import PopupView from "./pages/PopupView";
 import FullReportView from "./pages/FullReportView";
 import axios from "axios";
+import LoadingSpinner from "./components/LoadingSpinner";
+import ProgressIndicator from "./components/ProgressIndicator";
 
 /**
  * [UPDATED] Processes the detailed tracker list from the backend.
- * Instead of having its own logic, it now creates a summary count
- * based on the categories provided by the backend's rule-based system.
- * @param {Array<Object>} trackerDetails - The detailed list from response.data.aiSummary.trackerDetails.
+ * It creates a summary count based on the categories provided by the backend's rule-based system.
+ * @param {Array<Object>} trackerDetails - The detailed list from the AI summary.
  * @returns {Object} An object with tracker counts, e.g., { Advertising: 3, Analytics: 5 }.
  */
 function categorizeTrackers(trackerDetails = []) {
@@ -32,6 +33,7 @@ function App() {
   const [error, setError] = useState(null);
   const [manualUrl, setManualUrl] = useState("");
   const [showManualInput, setShowManualInput] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
 
   // Simplified logging - only to console
   const logInfo = (message) => {
@@ -45,6 +47,8 @@ function App() {
     );
     setLoading(true);
     setError(null);
+    setAnalysisProgress(1);
+
 
     if (!inputUrl || !inputUrl.trim()) {
       logInfo("Empty or invalid input");
@@ -103,9 +107,8 @@ function App() {
 
     // Prepare API request
     const requestData = {
-      url: finalUrl,
-      simplifiedPolicy:
-        "This site uses cookies and collects emails encrypted no data sharing gdpr privacy focused",
+        url: finalUrl,
+        forceRefresh: !isAutoDetected,
     };
 
     logInfo("Sending request to backend...");
@@ -114,15 +117,16 @@ function App() {
     axios
       .post("http://localhost:5000/api/sites/analyze", requestData)
       .then((response) => {
-        logInfo("Analysis complete!");
+        logInfo("Analysis complete!", response.data);
         const site = response.data.site;
+        setAnalysisProgress(2);
 
-        // [UPDATE] Use the new dynamic categorization function.
-        // It processes the detailed tracker information from the AI summary.
-        const trackerDetails = response.data.aiSummary?.trackerDetails || [];
+        // [FIXED] The aiSummary is nested inside response.data.site, not at the top level.
+        const trackerDetails = response.data.site.aiSummary?.trackerDetails || [];
         site.trackers = categorizeTrackers(trackerDetails);
 
         setSiteData(site);
+        setAnalysisProgress(3);
         setLoading(false);
         setShowManualInput(false); // Hide manual input on success
       })
@@ -339,28 +343,17 @@ function App() {
   };
 
   // Loading view (auto-detection in progress)
-  if (loading && !showManualInput) {
+  if (loading) {
     return (
-      <div className="w-[400px] p-4 bg-gray-50">
-        <div className="flex items-center justify-center mb-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
-          <span className="text-gray-700">Analyzing current website...</span>
-        </div>
-
-        <div className="text-center">
-          <p className="text-sm text-gray-600 mb-4">
-            Detecting trackers and analyzing privacy practices...
-          </p>
-
-          <button
-            onClick={() => {
-              setShowManualInput(true);
-              setLoading(false);
-            }}
-            className="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:bg-gray-600 transition-colors"
-          >
-            Enter URL Manually
-          </button>
+      <div className="w-[400px] h-[500px] flex flex-col items-center justify-center bg-gray-50">
+        <LoadingSpinner message="Analyzing website..." />
+        <div className="w-full px-8 mt-4">
+          <ProgressIndicator
+            currentStep={analysisProgress}
+            totalSteps={3}
+            steps={["Fetching Data", "AI Analysis", "Finalizing"]}
+            isVisible={true}
+          />
         </div>
       </div>
     );
@@ -369,7 +362,7 @@ function App() {
   // Manual input view or error view
   if (showManualInput || error) {
     return (
-      <div className="w-[400px] p-4 bg-gray-50">
+      <div className="w-[400px] h-[500px] p-6 bg-gray-50 flex flex-col justify-center">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4">
             <div className="flex items-center">
@@ -485,3 +478,4 @@ function App() {
 }
 
 export default App;
+
