@@ -50,7 +50,7 @@ export async function generateAIPrivacySummary(trackers, url) {
       });
       return fallbackResponse;
     }
-    const model = genAI.getGenerativeModel({model:"gemini-2.5-pro"});
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
     // Create a comprehensive prompt
     const prompt = `
 You are a privacy analysis expert. Analyze the following website and its trackers to provide a comprehensive privacy summary.
@@ -110,9 +110,49 @@ Provide realistic assessments based on the actual trackers detected.
     const validatedSummary = validateSummary(summary);
     const trackerDetails = buildTrackerDetails(trackers);
 
+    // Build popup/full variants with sentence-aware limits
+    const sentenceAwareTruncate = (text, targetWords = 40) => {
+      if (!text || typeof text !== 'string') return text;
+      const clean = text.trim();
+      if (!clean) return clean;
+      const sentences = clean.split(/(?<=[.!?])\s+/);
+      let out = [];
+      let count = 0;
+      for (const s of sentences) {
+        const w = s.trim().split(/\s+/).filter(Boolean);
+        if (w.length === 0) continue;
+        out.push(s.trim());
+        count += w.length;
+        if (count >= targetWords) break;
+      }
+      if (out.length > 0) return out.join(' ');
+      const words = clean.split(/\s+/);
+      if (words.length <= targetWords) return clean;
+      return words.slice(0, targetWords).join(' ') + '…';
+    };
+
+    const limitArray = (arr, words) =>
+      (Array.isArray(arr) ? arr : []).map((t) => sentenceAwareTruncate(String(t), words));
+
+    const popupSummary = {
+      whatTheyCollect: limitArray(validatedSummary.whatTheyCollect, 40).slice(0, 3),
+      whoTheyShareWith: limitArray(validatedSummary.whoTheyShareWith, 40).slice(0, 3),
+      howLongTheyKeep: sentenceAwareTruncate(validatedSummary.howLongTheyKeep, 40),
+      keyRisks: limitArray(validatedSummary.keyRisks, 40).slice(0, 3),
+      trackerBreakdown: limitArray(validatedSummary.trackerBreakdown, 40).slice(0, 3),
+    };
+
+    const fullSummary = {
+      whatTheyCollect: limitArray(validatedSummary.whatTheyCollect, 70).slice(0, 5),
+      whoTheyShareWith: limitArray(validatedSummary.whoTheyShareWith, 70).slice(0, 6),
+      howLongTheyKeep: sentenceAwareTruncate(validatedSummary.howLongTheyKeep, 70),
+      keyRisks: limitArray(validatedSummary.keyRisks, 70).slice(0, 4),
+      trackerBreakdown: limitArray(validatedSummary.trackerBreakdown, 70).slice(0, 4),
+    };
+
     const finalResponse = {
       success: true,
-      summary: validatedSummary,
+      summary: { ...validatedSummary, popupSummary, fullSummary },
       trackerCount: trackers.length,
       trackerDetails,
       rawResponse: text, // For debugging
