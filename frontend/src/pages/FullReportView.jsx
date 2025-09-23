@@ -110,6 +110,19 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
       <ReportHeader score={grade} url={url} onNavigate={onNavigate} />
 
       <div className="p-4 md:p-6 space-y-6">
+
+
+         {/* AI Privacy Analysis */}
+        <CollapsibleSection title="AI-Powered Privacy Summary" icon={<InformationCircleIcon className="w-6 h-6 text-blue-600"/>} defaultOpen={true}>
+            <div className="pt-4">
+              {aiSummary && aiSummary.summary ? (
+                   <AIPrivacyAnalysis aiSummary={aiSummary} simplifiedPolicy={simplifiedPolicy}/>
+              ) : (
+                  <p className="text-gray-600">The AI privacy summary could not be generated for this website.</p>
+              )}
+            </div>
+        </CollapsibleSection>
+
         {/* Tracker Blocking Controls */}
         <CollapsibleSection title="Privacy Controls" icon={<ShieldCheckIcon className="w-6 h-6 text-blue-600"/>} defaultOpen={true}>
             <div className="space-y-3 pt-4">
@@ -140,16 +153,7 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
             </div>
         </CollapsibleSection>
 
-        {/* AI Privacy Analysis */}
-        <CollapsibleSection title="AI-Powered Privacy Summary" icon={<InformationCircleIcon className="w-6 h-6 text-blue-600"/>} defaultOpen={true}>
-            <div className="pt-4">
-              {aiSummary && aiSummary.summary ? (
-                   <AIPrivacyAnalysis aiSummary={aiSummary} simplifiedPolicy={simplifiedPolicy}/>
-              ) : (
-                  <p className="text-gray-600">The AI privacy summary could not be generated for this website.</p>
-              )}
-            </div>
-        </CollapsibleSection>
+       
         
         {/* Data Flow Visualization */}
         <CollapsibleSection title="Tracker Network Visualization" icon={<ShareIcon className="w-6 h-6 text-blue-600"/>} defaultOpen={false}>
