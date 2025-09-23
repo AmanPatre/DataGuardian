@@ -6,10 +6,10 @@ import {
 } from "@heroicons/react/24/solid";
 
 const getScoreColor = (score) => {
-  if (["A+", "A", "A-"].includes(score)) return "from-green-400 to-emerald-500";
-  if (["B+", "B", "B-"].includes(score)) return "from-blue-400 to-cyan-500";
-  if (["C+", "C", "C-"].includes(score)) return "from-yellow-400 to-orange-500";
-  return "from-red-400 to-pink-500"; // For D and F scores
+  if (["A+", "A", "A-"].includes(score)) return "from-green-500 to-emerald-600";
+  if (["B+", "B", "B-"].includes(score)) return "from-blue-500 to-cyan-600";
+  if (["C+", "C", "C-"].includes(score)) return "from-yellow-500 to-orange-600";
+  return "from-red-600 to-pink-600"; // For D and F scores
 };
 
 const getScoreIcon = (score) => {
@@ -54,11 +54,11 @@ const Header = ({ score, isAnalyzing = false }) => {
           )}
 
           <div
-            className={`relative px-4 py-2 text-white font-bold text-lg rounded-xl shadow-lg ${getScoreColor(
+            className={`relative px-4 py-2 text-white font-bold text-lg rounded-xl shadow-lg bg-gradient-to-r ${getScoreColor(
               score
             )}`}
           >
-            <div className="absolute inset-0 bg-white/20 rounded-xl"></div>
+            {/* Removed white overlay to avoid washing out the grade color */}
             <div className="relative flex items-center gap-2">
               {getScoreIcon(score)}
               <span>{score}</span>

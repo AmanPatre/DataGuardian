@@ -42,6 +42,152 @@ class PrivacyManager {
     }
   }
 
+  // Global privacy mode (stealth | research)
+  async getPrivacyMode() {
+    const defaultMode = 'research';
+    if (!this.isExtension) return defaultMode;
+
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['privacyMode'], (r) => resolve(r));
+      });
+      return result?.privacyMode === 'stealth' ? 'stealth' : defaultMode;
+    } catch (e) {
+      return defaultMode;
+    }
+  }
+
+  async setPrivacyMode(mode) {
+    if (!this.isExtension) return;
+    const normalized = mode === 'stealth' ? 'stealth' : 'research';
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set({ privacyMode: normalized, lastModeChangeAt: Date.now() }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Broadcast for other parts of the extension
+    try {
+      if (this.isExtension) {
+        chrome.runtime.sendMessage({ type: 'PRIVACY_MODE_CHANGED', mode: normalized });
+      }
+    } catch (_) { }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('privacyModeChanged', { detail: { mode: normalized } }));
+    }
+  }
+
+  // Enable/disable all tracker category blocks for current site
+  async setAllTrackerBlocksForSite(siteUrl, enabled) {
+    if (!this.isExtension) return;
+    try {
+      const domain = this.getDomainFromUrl(siteUrl);
+      const storageKey = `privacySettings_${domain}`;
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get([storageKey], (r) => resolve(r || {}));
+      });
+      const current = result[storageKey] || this.getDefaultSettings();
+      const updated = {
+        ...current,
+        blockTrackers: enabled,
+        blockAdTrackers: enabled,
+        blockAnalyticsTrackers: enabled,
+        blockSocialTrackers: enabled,
+      };
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.set({ [storageKey]: updated }, () => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve();
+        });
+      });
+      this.settings = updated;
+      this.notifySettingChanged('bulkTrackerBlocks', enabled);
+    } catch (e) {
+      console.error('Failed to set all tracker blocks for site:', e);
+    }
+  }
+
+  // ===== Helpers for Stealth/Research enforcement =====
+  isEssentialRequest({ url, initiator }) {
+    try {
+      const parsed = new URL(url);
+      if (!initiator) return true; // default allow if unknown (e.g., system)
+      const initiatorOrigin = new URL(initiator).origin;
+      const reqOrigin = `${parsed.protocol}//${parsed.host}`;
+      return initiatorOrigin === reqOrigin; // same-origin considered essential
+    } catch (_) {
+      return true;
+    }
+  }
+
+  classifyTracker(url) {
+    const trackerDomains = [
+      'google-analytics.com', 'googletagmanager.com', 'doubleclick.net',
+      'facebook.net', 'connect.facebook.net', 'twitter.com', 'ads-twitter.com',
+      'linkedin.com', 'snapchat.com', 'pinterest.com', 'tiktok.com',
+      'scorecardresearch.com', 'quantserve.com', 'comscore.com',
+      'mixpanel.com', 'segment.com', 'amplitude.com', 'hotjar.com'
+    ];
+    try {
+      const host = new URL(url).host;
+      return trackerDomains.some(d => host.includes(d)) ? 'tracker' : 'unknown';
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  redactPIIInUrl(url) {
+    const keys = ['email', 'e-mail', 'uid', 'user_id', 'device_id', 'fbclid', 'gclid', '_ga', 'ip', 'lat', 'lon'];
+    try {
+      const u = new URL(url);
+      keys.forEach(k => u.searchParams.delete(k));
+      return u.toString();
+    } catch (_) {
+      return url;
+    }
+  }
+
+  stripSensitiveHeaders(headers = []) {
+    const blocked = new Set(['cookie', 'authorization', 'etag', 'if-none-match', 'x-client-id']);
+    return headers.filter(h => !blocked.has((h.name || h.header || '').toString().toLowerCase()));
+  }
+
+  async getStablePseudonymForSite(origin) {
+    const fallback = 'anonymous';
+    if (!this.isExtension) return fallback;
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['sitePseudonyms'], (r) => resolve(r || {}));
+      });
+      const map = result.sitePseudonyms || {};
+      if (map[origin]) return map[origin];
+      const uuid = self.crypto?.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      map[origin] = uuid;
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.set({ sitePseudonyms: map }, () => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve();
+        });
+      });
+      return uuid;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  async pseudonymizeRequest({ url, headers = [], origin }) {
+    const sanitizedUrl = this.redactPIIInUrl(url);
+    const cleanHeaders = this.stripSensitiveHeaders(headers);
+    const pseudonym = await this.getStablePseudonymForSite(origin || '');
+    const added = { name: 'X-Research-Pseudonym', value: pseudonym };
+    return { url: sanitizedUrl, headers: [...cleanHeaders, added] };
+  }
+
   // Save settings to storage for specific site
   async saveSettings(siteUrl = null) {
     if (!this.isExtension) return;

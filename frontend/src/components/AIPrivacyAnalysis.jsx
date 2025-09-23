@@ -10,6 +10,13 @@ import {
 const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
   const hasAISummary = aiSummary && aiSummary.success && aiSummary.summary;
 
+  const truncateWords = (text, maxWords = 75) => {
+    if (!text || typeof text !== "string") return text;
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(" ") + "…";
+  };
+
   if (!hasAISummary) {
     return (
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -50,9 +57,9 @@ const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
           </h3>
           <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
             {aiSummary.summary.whatTheyCollect
-              ?.slice(0, 5)
+              ?.slice(0, 3)
               .map((item, index) => (
-                <li key={index}>{item}</li>
+                <li key={index}>{truncateWords(item, 60)}</li>
               ))}
           </ul>
         </div>
@@ -65,18 +72,18 @@ const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
           </h3>
           <div className="flex flex-wrap gap-2">
             {aiSummary.summary.whoTheyShareWith
-              ?.slice(0, 6)
+              ?.slice(0, 3)
               .map((company, index) => (
                 <span
                   key={index}
                   className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full"
                 >
-                  {company}
+                  {truncateWords(company, 12)}
                 </span>
               ))}
-            {aiSummary.summary.whoTheyShareWith?.length > 6 && (
+            {aiSummary.summary.whoTheyShareWith?.length > 3 && (
               <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                +{aiSummary.summary.whoTheyShareWith.length - 6} more
+                +{aiSummary.summary.whoTheyShareWith.length - 3} more
               </span>
             )}
           </div>
@@ -88,9 +95,14 @@ const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
             <ClockIcon className="w-4 h-4 text-orange-500" />
             Data Retention:
           </h3>
-          <p className="text-sm text-gray-600 bg-orange-50 p-2 rounded">
-            {aiSummary.summary.howLongTheyKeep || "Information not available"}
-          </p>
+          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 bg-orange-50 p-2 rounded">
+            {[aiSummary.summary.howLongTheyKeep || "Information not available"]
+              .filter(Boolean)
+              .slice(0, 1)
+              .map((t, i) => (
+                <li key={i}>{truncateWords(t, 60)}</li>
+              ))}
+          </ul>
         </div>
 
         {/* Key Privacy Risks */}
@@ -100,8 +112,8 @@ const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
             Privacy Risks:
           </h3>
           <ul className="list-disc list-inside text-sm text-red-600 space-y-1 bg-red-50 p-2 rounded">
-            {aiSummary.summary.keyRisks?.slice(0, 4).map((risk, index) => (
-              <li key={index}>{risk}</li>
+            {aiSummary.summary.keyRisks?.slice(0, 3).map((risk, index) => (
+              <li key={index}>{truncateWords(risk, 60)}</li>
             ))}
           </ul>
         </div>
@@ -115,13 +127,13 @@ const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
             </h3>
             <div className="space-y-2">
               {aiSummary.summary.trackerBreakdown
-                .slice(0, 4)
+                .slice(0, 3)
                 .map((tracker, index) => (
                   <div
                     key={index}
                     className="text-xs bg-yellow-50 p-2 rounded border-l-2 border-yellow-400"
                   >
-                    {tracker}
+                    {truncateWords(tracker, 60)}
                   </div>
                 ))}
             </div>

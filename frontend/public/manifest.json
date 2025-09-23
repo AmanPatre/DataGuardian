@@ -17,6 +17,8 @@
     "scripting",
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess",
+    "webRequest",
+    "webRequestBlocking",
     "contentSettings",
     "notifications",
     "webNavigation",

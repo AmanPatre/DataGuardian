@@ -5,14 +5,18 @@ class DataGuardianBackground {
   constructor() {
     this.settings = {};
     this.blockedRequests = new Map();
+    this.privacyMode = 'research';
+    this.sitePseudonymCache = {};
     this.init();
   }
 
   async init() {
     console.log('DataGuardian Background Script Starting...');
     await this.loadSettings();
+    await this.loadPrivacyMode();
     this.setupEventListeners();
     this.setupRequestBlocking();
+    this.setupWebRequestEnforcement();
     console.log('DataGuardian Background Script Ready');
   }
 
@@ -88,24 +92,50 @@ class DataGuardianBackground {
       return true; // Keep message channel open for async response
     });
 
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === 'local' && changes.privacySettings) {
-        this.settings = changes.privacySettings.newValue || {};
-        console.log('Settings updated from storage:', this.settings);
+    chrome.storage.onChanged.addListener(async (changes, areaName) => {
+      if (areaName !== 'local') return;
+      try {
+        for (const [key, change] of Object.entries(changes)) {
+          if (key === 'privacyMode') {
+            this.privacyMode = change.newValue || 'research';
+            console.log('Privacy mode changed:', this.privacyMode);
+            this.setupRequestBlocking();
+            continue;
+          }
+          if (key.startsWith('privacySettings_')) {
+            // Only apply if the changed domain matches the active tab's domain
+            let activeTab;
+            try {
+              const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+              activeTab = tabs && tabs[0];
+            } catch (_) { }
+
+            const changedDomain = key.replace('privacySettings_', '');
+            const activeDomain = activeTab?.url ? this.getDomainFromUrl(activeTab.url) : null;
+            if (activeDomain && changedDomain === activeDomain) {
+              const defaults = this.getDefaultSettings();
+              this.settings = { ...defaults, ...(change.newValue || {}) };
+              console.log('Settings updated from storage:', this.settings);
+              this.setupRequestBlocking();
+            }
+          }
+        }
+      } catch (_) {
+        // noop
       }
     });
-    
+
     // This ensures rules are updated when switching tabs
     chrome.tabs.onActivated.addListener(async (activeInfo) => {
-        try {
-            const tab = await chrome.tabs.get(activeInfo.tabId);
-            if (tab && tab.url) {
-                await this.loadSettings(tab.url);
-                this.setupRequestBlocking();
-            }
-        } catch (error) {
-            console.log("Could not get tab info on activation:", error.message);
+      try {
+        const tab = await chrome.tabs.get(activeInfo.tabId);
+        if (tab && tab.url) {
+          await this.loadSettings(tab.url);
+          this.setupRequestBlocking();
         }
+      } catch (error) {
+        console.log("Could not get tab info on activation:", error.message);
+      }
     });
 
     chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -121,6 +151,143 @@ class DataGuardianBackground {
         this.onSiteChanged(details.tabId, details.url);
       }
     });
+  }
+
+  async loadPrivacyMode() {
+    try {
+      const r = await chrome.storage.local.get(['privacyMode']);
+      this.privacyMode = r?.privacyMode === 'stealth' ? 'stealth' : 'research';
+    } catch (_) {
+      this.privacyMode = 'research';
+    }
+  }
+
+  // ====== Stealth/Research enforcement via webRequest ======
+  setupWebRequestEnforcement() {
+    try {
+      // Cancel/redirect phase
+      chrome.webRequest.onBeforeRequest.addListener(
+        (details) => this.handleBeforeRequest(details),
+        { urls: ['<all_urls>'] },
+        ['blocking']
+      );
+
+      // Headers phase
+      chrome.webRequest.onBeforeSendHeaders.addListener(
+        (details) => this.handleBeforeSendHeaders(details),
+        { urls: ['<all_urls>'] },
+        ['blocking', 'requestHeaders', 'extraHeaders']
+      );
+    } catch (e) {
+      console.warn('webRequest listeners may require permissions:', e.message);
+    }
+  }
+
+  isThirdParty(details) {
+    try {
+      if (!details.initiator) return false;
+      const initiatorHost = new URL(details.initiator).host;
+      const reqHost = new URL(details.url).host;
+      return initiatorHost !== reqHost;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  classifyTrackerUrl(url) {
+    const trackerHosts = [
+      'google-analytics.com', 'googletagmanager.com', 'doubleclick.net', 'facebook.net',
+      'connect.facebook.net', 'ads-twitter.com', 'linkedin.com', 'snapchat.com', 'pinterest.com',
+      'tiktok.com', 'scorecardresearch.com', 'quantserve.com', 'comscore.com', 'mixpanel.com',
+      'segment.com', 'amplitude.com', 'hotjar.com'
+    ];
+    try {
+      const host = new URL(url).host;
+      return trackerHosts.some(d => host.includes(d));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  redactPIIInUrl(url) {
+    const keys = ['email', 'e-mail', 'uid', 'user_id', 'device_id', 'fbclid', 'gclid', '_ga', 'ip', 'lat', 'lon'];
+    try {
+      const u = new URL(url);
+      keys.forEach(k => u.searchParams.delete(k));
+      return u.toString();
+    } catch (_) {
+      return url;
+    }
+  }
+
+  async getOrCreateSitePseudonym(origin) {
+    if (this.sitePseudonymCache[origin]) return this.sitePseudonymCache[origin];
+    try {
+      const r = await chrome.storage.local.get(['sitePseudonyms']);
+      const map = r.sitePseudonyms || {};
+      if (map[origin]) {
+        this.sitePseudonymCache[origin] = map[origin];
+        return map[origin];
+      }
+      const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      map[origin] = uuid;
+      await chrome.storage.local.set({ sitePseudonyms: map });
+      this.sitePseudonymCache[origin] = uuid;
+      return uuid;
+    } catch (_) {
+      return 'anonymous';
+    }
+  }
+
+  handleBeforeRequest(details) {
+    // Ignore non-main frame and browser-internal
+    if (details.url.startsWith('chrome-extension://') || details.url.startsWith('chrome://')) return {};
+
+    const mode = this.privacyMode;
+    const isThird = this.isThirdParty(details);
+    const isTracker = this.classifyTrackerUrl(details.url);
+
+    if (mode === 'stealth') {
+      if (isThird || isTracker) {
+        return { cancel: true };
+      }
+      // Essential same-origin: sanitize URL
+      const sanitized = this.redactPIIInUrl(details.url);
+      if (sanitized !== details.url) {
+        return { redirectUrl: sanitized };
+      }
+      return {};
+    }
+
+    // research: allow but sanitize URL
+    const sanitized = this.redactPIIInUrl(details.url);
+    if (sanitized !== details.url) {
+      return { redirectUrl: sanitized };
+    }
+    return {};
+  }
+
+  async handleBeforeSendHeaders(details) {
+    if (!details.requestHeaders) return {};
+    const mode = this.privacyMode;
+    const lower = (s) => (s || '').toLowerCase();
+    const blocked = new Set(['cookie', 'authorization', 'etag', 'if-none-match']);
+    let headers = details.requestHeaders.filter(h => !blocked.has(lower(h.name)));
+
+    if (mode === 'research') {
+      try {
+        const origin = details.initiator ? new URL(details.initiator).origin : '';
+        const pseudonym = await this.getOrCreateSitePseudonym(origin || '');
+        headers.push({ name: 'X-Research-Pseudonym', value: pseudonym });
+        // Reduce referrer to origin if present
+        const ref = headers.find(h => lower(h.name) === 'referer');
+        if (ref && ref.value) {
+          try { ref.value = new URL(ref.value).origin + '/'; } catch (_) { }
+        }
+      } catch (_) { }
+    }
+
+    return { requestHeaders: headers };
   }
 
   async handleMessage(request, sender, sendResponse) {
@@ -241,9 +408,17 @@ class DataGuardianBackground {
       const newRules = [];
       let ruleId = 1;
 
+      const mode = this.privacyMode;
+      const shouldBlockAll = mode === 'stealth';
+
       for (const category in trackerDomains) {
         const settingKey = `block${category.replace(/[^a-zA-Z0-9]/g, '')}Trackers`;
-        if (this.settings[settingKey]) {
+        const enabled = shouldBlockAll ? true : !!this.settings[settingKey];
+        if (mode === 'research') {
+          // In research mode, allow everything via DNR (no new rules)
+          continue;
+        }
+        if (enabled) {
           trackerDomains[category].forEach(domain => {
             newRules.push({
               id: ruleId++,
@@ -347,14 +522,14 @@ class DataGuardianBackground {
   getBlockedCountForTab(tabId) {
     return this.blockedRequests.get(tabId) || 0;
   }
-  
+
   // Your original function, preserved completely
   async broadcastSettingChange(setting, value) {
     try {
       const tabs = await chrome.tabs.query({});
       tabs.forEach(tab => {
         chrome.tabs.sendMessage(tab.id, { type: 'SETTING_CHANGED', setting, value })
-          .catch(() => {}); // Ignore errors for tabs that don't have content scripts
+          .catch(() => { }); // Ignore errors for tabs that don't have content scripts
       });
     } catch (error) {
       console.error('Failed to broadcast setting change:', error);
