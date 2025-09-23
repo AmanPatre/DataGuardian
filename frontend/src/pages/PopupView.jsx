@@ -50,7 +50,7 @@ const getIcon = (iconName) => {
 // removed: PrivacyMeter (unused)
 
 // A compact version of the AI Analysis for the popup
-const CompactAIPrivacyAnalysis = ({ summary }) => {
+const CompactAIPrivacyAnalysis = ({ summary, onNavigate }) => {
   if (!summary || !summary.whatTheyCollect) {
     return (
       <p className="text-xs text-center text-gray-500 py-2">
@@ -59,35 +59,33 @@ const CompactAIPrivacyAnalysis = ({ summary }) => {
     );
   }
 
-  const truncateAtSentence = (text, targetWords = 35) => {
-    if (!text || typeof text !== "string") return text;
+  // Limit to N words and report if truncated
+  const truncateWordsWithFlag = (text, limit = 40) => {
+    if (!text || typeof text !== "string") return { text, truncated: false };
     const clean = text.trim();
-    if (!clean) return clean;
-    const sentences = clean.split(/(?<=[.!?])\s+/);
-    let result = [];
-    let count = 0;
-    for (const s of sentences) {
-      const w = s.trim().split(/\s+/).filter(Boolean);
-      if (w.length === 0) continue;
-      result.push(s.trim());
-      count += w.length;
-      if (count >= targetWords) break;
-    }
-    if (result.length > 0) return result.join(" ");
-    const words = clean.split(/\s+/);
-    if (words.length <= targetWords) return clean;
-    return words.slice(0, targetWords).join(" ") + "…";
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length <= limit) return { text: clean, truncated: false };
+    return { text: words.slice(0, limit).join(" ") + "…", truncated: true };
   };
 
   const renderSection = (title, data, icon) => {
     if (!data || data.length === 0) return null;
     const text = Array.isArray(data) ? data.join(", ") : String(data);
+    const { text: limited, truncated } = truncateWordsWithFlag(text, 40);
     return (
       <div className="flex items-start gap-2 text-xs">
         {icon}
-        <p>
-          <span className="font-semibold">{title}:</span>{" "}
-          {truncateAtSentence(text, 35)}
+        <p className="flex-1">
+          <span className="font-semibold">{title}:</span> {limited}
+          {truncated && (
+            <button
+              type="button"
+              className="text-blue-600 hover:underline ml-1"
+              onClick={() => onNavigate && onNavigate("fullReport")}
+            >
+              More
+            </button>
+          )}
         </p>
       </div>
     );
@@ -276,7 +274,10 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
               </p>
             </div>
           </div>
-          <CompactAIPrivacyAnalysis summary={aiSummary?.summary} />
+          <CompactAIPrivacyAnalysis
+            summary={aiSummary?.summary}
+            onNavigate={onNavigate}
+          />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
