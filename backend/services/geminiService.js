@@ -5,6 +5,18 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const aiCache = new Map();
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
+// [UPDATE] Centralized source of truth for all tracker categories.
+// These categories are derived from your classifyDomain function.
+export const TRACKER_CATEGORIES = {
+  Advertising: "Advertising",
+  Analytics: "Analytics",
+  Social: "Social",
+  "Tag Manager": "Tag Manager",
+  "CDN/Utility": "CDN/Utility",
+  Unknown: "Unknown",
+};
+
+
 export async function generateAIPrivacySummary(trackers, url) {
   try {
     // Check cache first
@@ -36,12 +48,9 @@ export async function generateAIPrivacySummary(trackers, url) {
         data: fallbackResponse,
         timestamp: Date.now()
       });
-
       return fallbackResponse;
     }
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-
+    const model = genAI.getGenerativeModel({model:"gemini-2.5-pro"});
     // Create a comprehensive prompt
     const prompt = `
 You are a privacy analysis expert. Analyze the following website and its trackers to provide a comprehensive privacy summary.
