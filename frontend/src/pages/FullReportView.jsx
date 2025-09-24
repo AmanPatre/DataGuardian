@@ -304,39 +304,53 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
         </CollapsibleSection>
 
         <CollapsibleSection
-          title="Detailed Tracker List"
-          icon={<ListBulletIcon className="w-6 h-6 text-blue-600" />}
-          defaultOpen={false}
-        >
-          <div className="pt-4 space-y-4">
-            {Object.keys(groupedTrackers).length > 0 ? (
-              Object.keys(groupedTrackers).map((category) => (
-                <div key={category}>
-                  <h3 className="font-semibold text-gray-700 mb-2 border-b pb-1">
-                    {category}
-                  </h3>
-                  <ul className="space-y-1">
-                    {groupedTrackers[category].map((tracker) => (
-                      <li
-                        key={tracker.domain}
-                        className="text-sm text-gray-800 font-mono bg-gray-50 p-2 rounded flex justify-between items-center"
-                      >
-                        <span>{tracker.domain}</span>
-                        <span className="text-gray-400 font-sans text-xs bg-white px-2 py-1 rounded-full">
-                          {tracker.company}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-600">
-                No specific tracker domains were identified.
-              </p>
-            )}
+  title="Detailed Tracker List"
+  icon={<ListBulletIcon className="w-6 h-6 text-blue-600" />}
+  defaultOpen={false}
+>
+  <div className="pt-4 space-y-6">
+    {Object.keys(groupedTrackers).length > 0 ? (
+      Object.keys(groupedTrackers).map((category) => {
+        const details =
+          categoryDetails[category] || categoryDetails.Unknown;
+        return (
+          <div key={category}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="p-2 bg-gray-100 rounded-lg">
+                {getIcon(details.icon)}
+              </span>
+              <h3 className="font-semibold text-gray-800 text-md">
+                {category} ({groupedTrackers[category].length})
+              </h3>
+            </div>
+            <ul className="space-y-2 pl-4 border-l-2 border-gray-200 ml-4">
+              {groupedTrackers[category].map((tracker) => (
+                <li
+                  key={tracker.domain}
+                  className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg flex justify-between items-center"
+                >
+                  <div>
+                    <span className="font-mono">{tracker.domain}</span>
+                    <span className="block text-gray-500 text-xs mt-1">
+                      Identified as: {tracker.name}
+                    </span>
+                  </div>
+                  <span className="font-sans text-xs bg-white text-gray-600 px-2 py-1 rounded-full border">
+                    {tracker.company}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </CollapsibleSection>
+        );
+      })
+    ) : (
+      <p className="text-gray-600 text-center py-4">
+        No specific tracker domains were identified.
+      </p>
+    )}
+  </div>
+</CollapsibleSection>
       </div>
     </div>
   );
