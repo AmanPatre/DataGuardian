@@ -104,22 +104,34 @@ function isDatabaseConnected() {
 const analyzeSite = async (req, res) => {
   try {
     const { url, simplifiedPolicy } = req.body;
-
     console.log(`🔍 Starting analysis for: ${url}`);
 
-    // [NEW] Automatic 48-hour cache validation logic
     if (isDatabaseConnected()) {
       const existingSite = await Site.findOne({ url });
-      if (existingSite) {
-        const fortyEightHoursAgo = new Date(
-          Date.now() - 48 * 60 * 60 * 1000
-        );
-        const isDataFresh = existingSite.lastAnalyzed > fortyEightHoursAgo;
+      if (existingSite && existingSite.lastAnalyzed) {
+        const now = new Date();
+        const lastAnalyzed = new Date(existingSite.lastAnalyzed);
 
-        if (isDataFresh) {
-          console.log(
-            `✅ Cache hit: Data for ${url} is fresh. Returning stored info.`
-          );
+        // Define cache durations
+        const successfulCacheDuration = 48 * 60 * 60 * 1000; // 48 hours
+        const failedCacheDuration = 30 * 60 * 1000;      // 30 minutes
+
+        let isCacheValid = false;
+
+        // Check if the AI summary was successful and use the appropriate cache duration
+        if (existingSite.aiSummary && existingSite.aiSummary.success) {
+          if ((now - lastAnalyzed) < successfulCacheDuration) {
+            isCacheValid = true;
+          }
+        } else {
+          // For failed or non-existent AI summaries, use the shorter cache
+          if ((now - lastAnalyzed) < failedCacheDuration) {
+            isCacheValid = true;
+          }
+        }
+
+        if (isCacheValid) {
+          console.log(`✅ Cache hit: Data for ${url} is fresh. Returning stored info.`);
           const response = {
             success: true,
             message: "Site data retrieved from cache",
@@ -136,17 +148,13 @@ const analyzeSite = async (req, res) => {
               summary: generateUserFriendlySummary(existingSite),
             },
           };
-          return res.status(200).json(response); // Use 200 for cache hit
+          return res.status(200).json(response);
         }
-        console.log(
-          `⏱️ Cache stale: Data for ${url} is older than 48 hours. Re-analyzing.`
-        );
+        console.log(`⏱️ Cache stale for ${url}. Re-analyzing.`);
       }
     }
 
     // --- If cache is missed or stale, proceed with full analysis ---
-
-    // Step 1: Detect trackers
     console.log("📊 Detecting trackers...");
     const trackerResult = await detectTrackers(url);
 
@@ -158,35 +166,27 @@ const analyzeSite = async (req, res) => {
         details: trackerResult.error,
       });
     }
-
     const { detectedTrackers } = trackerResult;
-    console.log(`Found ${detectedTrackers.length} trackers:`, detectedTrackers);
 
-    // Step 2: Generate AI Privacy Summary
     console.log("🤖 Generating AI privacy summary...");
     const aiSummary = await generateAIPrivacySummary(detectedTrackers, url);
-    console.log("AI Summary generated:", aiSummary.success ? "✅" : "❌");
 
-    // Step 3: Calculate privacy score
     const score = calculatePrivacyScore({
       url,
       simplifiedPolicy,
       trackers: detectedTrackers,
       aiSummary,
     });
-
     const grade = getGradeFromScore(score);
     const category = getCategory(score);
 
     console.log(`📈 Privacy Score: ${score} (${grade}) - ${category}`);
 
-    // Step 4: Try to save to database (but continue even if it fails)
     let site = null;
     let dbError = null;
 
     if (isDatabaseConnected()) {
       try {
-        // Use findOneAndUpdate with upsert:true to simplify logic
         const siteData = {
           url,
           simplifiedPolicy,
@@ -205,24 +205,11 @@ const analyzeSite = async (req, res) => {
       } catch (dbErr) {
         console.warn("⚠️ Database operation failed:", dbErr.message);
         dbError = dbErr.message;
-
-        // Create a temporary site object for response
-        site = {
-          url,
-          simplifiedPolicy,
-          score,
-          grade,
-          category,
-          trackers: detectedTrackers,
-          aiSummary,
-          lastAnalyzed: new Date(),
-        };
+        site = { ...siteData }; // Use the generated data for the response
       }
     } else {
       console.warn("⚠️ Database not connected - creating temporary response");
       dbError = "Database not connected";
-
-      // Create a temporary site object for response
       site = {
         url,
         simplifiedPolicy,
@@ -235,7 +222,6 @@ const analyzeSite = async (req, res) => {
       };
     }
 
-    // Step 5: Prepare response with formatted data
     const response = {
       success: true,
       message: "Site analyzed successfully",
