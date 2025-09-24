@@ -119,16 +119,24 @@ function App() {
       .then((response) => {
         logInfo("Analysis complete!", response.data);
         const site = response.data.site;
-        setAnalysisProgress(2);
+        setAnalysisProgress(2); // Move to AI Analysis step
 
         // [FIXED] The aiSummary is nested inside response.data.site, not at the top level.
         const trackerDetails = response.data.site.aiSummary?.trackerDetails || [];
         site.trackers = categorizeTrackers(trackerDetails);
-
+        
         setSiteData(site);
-        setAnalysisProgress(3);
-        setLoading(false);
-        setShowManualInput(false); // Hide manual input on success
+
+        // Add a delay to show the "Finalizing" step
+        setTimeout(() => {
+          setAnalysisProgress(3); // Move to Finalizing step
+          
+          // Add another small delay before hiding the loader
+          setTimeout(() => {
+            setLoading(false);
+            setShowManualInput(false); // Hide manual input on success
+          }, 500); // 500ms for the user to see the "Finalizing" step
+        }, 500); // 500ms for the user to see the "AI Analysis" step
       })
       .catch((err) => {
         logInfo(`Backend error: ${err.message}`);
@@ -446,7 +454,11 @@ function App() {
         {currentView === "popup" ? (
           <PopupView siteData={siteData} onNavigate={navigateTo} />
         ) : (
-          <FullReportView siteData={siteData} onNavigate={navigateTo} />
+          <FullReportView
+            siteData={siteData}
+            onNavigate={navigateTo}
+            setSiteData={setSiteData}
+          />
         )}
 
         {/* Add a small button to analyze a different site */}
@@ -478,4 +490,3 @@ function App() {
 }
 
 export default App;
-

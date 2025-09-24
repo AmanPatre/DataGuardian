@@ -4,6 +4,7 @@ import ModernToggle from "../components/ModernToggle";
 import AIPrivacyAnalysis from "../components/AIPrivacyAnalysis";
 import TrackerNetworkVisualization from "../components/TrackerNetworkVisualization";
 import { PrivacyManager } from "../utils/privacyManager";
+import { recalculateScoreAndGrade } from "../utils/scoring";
 import {
   BugAntIcon,
   ChartPieIcon,
@@ -63,7 +64,7 @@ const getIcon = (iconName) => {
   );
 };
 
-// [UI-ENHANCEMENT] A new collapsible section component to organize the report
+// A new collapsible section component to organize the report
 const CollapsibleSection = ({ title, icon, children, defaultOpen = true }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
@@ -89,7 +90,7 @@ const CollapsibleSection = ({ title, icon, children, defaultOpen = true }) => {
   );
 };
 
-const FullReportView = ({ siteData = {}, onNavigate }) => {
+const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
   const { url, grade, trackers = {}, aiSummary, simplifiedPolicy } = siteData;
   const trackerCategories = Object.keys(trackers);
 
@@ -97,7 +98,7 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
   const [trackerSettings, setTrackerSettings] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Group tracker domains by category for the new detailed list
+  // Group tracker domains by category for the detailed list
   const groupedTrackers = (aiSummary?.trackerDetails || []).reduce(
     (acc, tracker) => {
       const category = tracker.category || "Unknown";
@@ -110,7 +111,7 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
     {}
   );
 
-  // Load settings for all detected tracker categories - Functionality is identical
+  // Load settings for all detected tracker categories
   useEffect(() => {
     const loadTrackerSettings = async () => {
       setIsLoading(true);
@@ -135,7 +136,26 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
     else setIsLoading(false);
   }, [privacyManager, url, Object.keys(trackers).join(",")]);
 
-  // Handle toggling tracker categories - Functionality is identical
+  // [NEW] Recalculate score whenever settings change
+  useEffect(() => {
+    if (isLoading || !setSiteData) return;
+
+    const { score: newScore, grade: newGrade } = recalculateScoreAndGrade(
+      siteData,
+      trackerSettings
+    );
+
+    // Only update if the grade has actually changed to prevent re-render loops
+    if (newGrade !== siteData.grade) {
+      setSiteData((prevData) => ({
+        ...prevData,
+        score: newScore,
+        grade: newGrade,
+      }));
+    }
+  }, [trackerSettings, siteData, isLoading, setSiteData]);
+
+  // Handle toggling tracker categories
   const handleTrackerToggle = async (enabled, settingKey) => {
     try {
       await privacyManager.updateSetting(settingKey, enabled, url);
@@ -145,7 +165,7 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
     }
   };
 
-  // Refresh category toggles from storage (used after mode changes)
+  // Refresh category toggles from storage
   const refreshCategoryToggles = async () => {
     try {
       await privacyManager.loadSettings(url);
@@ -173,6 +193,13 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
     window.addEventListener("privacyModeChanged", handler);
     return () => window.removeEventListener("privacyModeChanged", handler);
   }, [url, trackerCategories.join(",")]);
+  
+  // Create a filtered list of trackers for the visualization
+  const visibleTrackers = (aiSummary?.trackerDetails || []).filter(tracker => {
+    const category = tracker.category || 'Unknown';
+    const settingKey = `block${category.replace(/[^a-zA-Z0-9]/g, '')}Trackers`;
+    return !trackerSettings[settingKey];
+  });
 
   return (
     <div
@@ -180,20 +207,17 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
       style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
     >
       <div className="relative">
-        {/* Back button to return to popup view */}
         <button
           onClick={() => onNavigate && onNavigate("popup")}
           className="absolute top-3 left-3 z-10 p-1 rounded-full hover:bg-gray-200 transition-colors"
           aria-label="Back to summary"
         >
-          {/* Using a simple unicode arrow to avoid new imports */}
           <span className="text-gray-700 text-xl leading-none">←</span>
         </button>
         <ModernHeader score={grade} isAnalyzing={false} />
       </div>
 
       <div className="p-4 md:p-6 space-y-6">
-        {/* AI Privacy Analysis */}
         <CollapsibleSection
           title="AI-Powered Privacy Summary"
           icon={<InformationCircleIcon className="w-6 h-6 text-blue-600" />}
@@ -213,7 +237,6 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
           </div>
         </CollapsibleSection>
 
-        {/* Tracker Blocking Controls */}
         <CollapsibleSection
           title="Privacy Controls"
           icon={<ShieldCheckIcon className="w-6 h-6 text-blue-600" />}
@@ -256,19 +279,30 @@ const FullReportView = ({ siteData = {}, onNavigate }) => {
           </div>
         </CollapsibleSection>
 
-        {/* Data Flow Visualization */}
         <CollapsibleSection
           title="Tracker Network Visualization"
           icon={<ShareIcon className="w-6 h-6 text-blue-600" />}
           defaultOpen={false}
         >
-          <TrackerNetworkVisualization
-            trackerDetails={aiSummary?.trackerDetails || []}
-            siteUrl={url}
-          />
+          {visibleTrackers.length > 0 ? (
+            <TrackerNetworkVisualization
+              trackerDetails={visibleTrackers}
+              siteUrl={url}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-[280px] text-center py-10 px-4 bg-slate-50 rounded-lg border border-gray-200">
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  No trackers to display on the map.
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  All detected tracker categories are currently blocked.
+                </p>
+              </div>
+            </div>
+          )}
         </CollapsibleSection>
 
-        {/* [UI-ENHANCEMENT] New section for a detailed list of all trackers */}
         <CollapsibleSection
           title="Detailed Tracker List"
           icon={<ListBulletIcon className="w-6 h-6 text-blue-600" />}

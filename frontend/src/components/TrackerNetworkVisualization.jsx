@@ -11,6 +11,9 @@ const TrackerNetworkVisualization = ({
   const containerRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
 
+  // [REMOVED] The conditional check for empty trackers is no longer needed here.
+  // The parent component will handle this logic.
+
   // Process tracker data for visualization
   const processTrackerData = () => {
     const hostname = new URL(url).hostname;
@@ -28,38 +31,7 @@ const TrackerNetworkVisualization = ({
       },
     ];
 
-    // Process tracker details or create sample data
-    const trackers =
-      trackerDetails.length > 0
-        ? trackerDetails.slice(0, 12)
-        : [
-            {
-              company: "Google Analytics",
-              category: "Analytics",
-              domain: "google-analytics.com",
-            },
-            {
-              company: "Facebook Pixel",
-              category: "Advertising",
-              domain: "facebook.com",
-            },
-            { company: "Hotjar", category: "Analytics", domain: "hotjar.com" },
-            {
-              company: "Amazon CDN",
-              category: "CDN/Utility",
-              domain: "cloudfront.net",
-            },
-            {
-              company: "Twitter Widget",
-              category: "Social",
-              domain: "twitter.com",
-            },
-            {
-              company: "Salesforce",
-              category: "Other",
-              domain: "salesforce.com",
-            },
-          ];
+    const trackers = trackerDetails.slice(0, 12);
 
     // Color mapping for categories
     const categoryColors = {
@@ -71,6 +43,7 @@ const TrackerNetworkVisualization = ({
       Social: "#f97316",
       "First-Party/Analytics": "#06b6d4",
       Other: "#6b7280",
+      Unknown: "#6b7280",
     };
 
     // Add tracker nodes
@@ -82,7 +55,8 @@ const TrackerNetworkVisualization = ({
         company: tracker.company,
         domain: tracker.domain || "unknown.com",
         size: 10,
-        color: categoryColors[tracker.category] || categoryColors["Other"],
+        color:
+          categoryColors[tracker.category] || categoryColors["Other"],
       });
     });
 
@@ -100,6 +74,9 @@ const TrackerNetworkVisualization = ({
   };
 
   useEffect(() => {
+    // [SAFETY CHECK] Although the parent handles it, an extra check prevents errors.
+    if (!trackerDetails || trackerDetails.length === 0) return;
+
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
@@ -109,12 +86,10 @@ const TrackerNetworkVisualization = ({
 
     svg.attr("width", width).attr("height", height);
 
-    const { nodes, links, categoryColors } = processTrackerData();
+    const { nodes, links } = processTrackerData();
 
     // Create defs for gradients and filters
     const defs = svg.append("defs");
-
-    // Gradient for website node
     const websiteGradient = defs
       .append("radialGradient")
       .attr("id", "websiteGradient");
@@ -127,7 +102,6 @@ const TrackerNetworkVisualization = ({
       .attr("offset", "100%")
       .attr("stop-color", "#3b82f6");
 
-    // Glow filter
     const filter = defs.append("filter").attr("id", "glow");
     filter
       .append("feGaussianBlur")
@@ -137,7 +111,6 @@ const TrackerNetworkVisualization = ({
     feMerge.append("feMergeNode").attr("in", "coloredBlur");
     feMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    // Create simulation
     const simulation = d3
       .forceSimulation(nodes)
       .force(
@@ -154,7 +127,6 @@ const TrackerNetworkVisualization = ({
         d3.forceCollide().radius((d) => d.size + 2)
       );
 
-    // Create link elements
     const link = svg
       .append("g")
       .selectAll("line")
@@ -165,10 +137,8 @@ const TrackerNetworkVisualization = ({
       .attr("stroke-opacity", 0.6)
       .attr("stroke-dasharray", "5,3");
 
-    // Create particle system for data flow
     const particles = svg.append("g").attr("class", "particles");
 
-    // Create nodes
     const node = svg
       .append("g")
       .selectAll("g")
@@ -177,7 +147,6 @@ const TrackerNetworkVisualization = ({
       .attr("class", "node")
       .style("cursor", "pointer");
 
-    // Add circles to nodes
     node
       .append("circle")
       .attr("r", (d) => d.size)
@@ -188,7 +157,6 @@ const TrackerNetworkVisualization = ({
       .attr("stroke-width", (d) => (d.type === "website" ? 3 : 2))
       .attr("filter", (d) => (d.type === "website" ? "url(#glow)" : "none"));
 
-    // Add labels to nodes
     node
       .append("text")
       .attr("dy", (d) => (d.type === "website" ? 25 : 18))
@@ -207,7 +175,6 @@ const TrackerNetworkVisualization = ({
           : d.company;
       });
 
-    // Add category labels for trackers
     node
       .filter((d) => d.type === "tracker")
       .append("text")
@@ -217,11 +184,9 @@ const TrackerNetworkVisualization = ({
       .style("fill", "#6b7280")
       .text((d) => d.category);
 
-    // Animation for particles along links
     const animateParticles = () => {
-      links.forEach((linkData, i) => {
+      links.forEach((linkData) => {
         if (Math.random() < 0.3) {
-          // 30% chance for particle
           const sourceNode = nodes.find(
             (n) => n.id === linkData.source.id || n.id === linkData.source
           );
@@ -250,7 +215,6 @@ const TrackerNetworkVisualization = ({
       });
     };
 
-    // Mouse interactions
     node
       .on("mouseover", (event, d) => {
         setHoveredNode(d);
@@ -271,7 +235,6 @@ const TrackerNetworkVisualization = ({
           .attr("stroke-width", d.type === "website" ? 3 : 2);
       });
 
-    // Update positions on tick
     simulation.on("tick", () => {
       link
         .attr("x1", (d) => d.source.x)
@@ -282,10 +245,8 @@ const TrackerNetworkVisualization = ({
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });
 
-    // Start particle animation interval
     const particleInterval = setInterval(animateParticles, 1500);
 
-    // Cleanup
     return () => {
       clearInterval(particleInterval);
       simulation.stop();
@@ -304,7 +265,6 @@ const TrackerNetworkVisualization = ({
         className="w-full border border-gray-200 rounded-lg bg-gradient-to-br from-slate-50 to-blue-50"
       ></svg>
 
-      {/* Tooltip */}
       {hoveredNode && (
         <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm p-2 rounded-lg shadow-lg border text-xs max-w-48">
           <div className="font-semibold text-gray-900">
@@ -325,7 +285,6 @@ const TrackerNetworkVisualization = ({
         </div>
       )}
 
-      {/* Legend */}
       <div className="mt-3 grid grid-cols-2 gap-1 text-xs">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 rounded-full bg-gradient-to-r from-blue-400 to-blue-600"></div>
@@ -347,7 +306,6 @@ const TrackerNetworkVisualization = ({
         ))}
       </div>
 
-      {/* Stats */}
       <div className="mt-2 text-xs text-center text-gray-500">
         <span className="inline-flex items-center gap-1">
           <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
