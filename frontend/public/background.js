@@ -15,7 +15,6 @@ class DataGuardianBackground {
     await this.loadPrivacyMode();
     this.setupEventListeners();
     this.setupRequestBlocking();
-    this.setupWebRequestEnforcement();
   }
 
   // [UPDATE] Creates a consistent, complete list of default settings.
@@ -144,11 +143,7 @@ class DataGuardianBackground {
       }
     });
 
-    chrome.webNavigation.onCompleted.addListener((details) => {
-      if (details.frameId === 0) { // Main frame only
-        this.onSiteChanged(details.tabId, details.url);
-      }
-    });
+    // webNavigation listener removed for MV3 minimal permissions
   }
 
   async loadPrivacyMode() {
@@ -160,26 +155,7 @@ class DataGuardianBackground {
     }
   }
 
-  // ====== Stealth/Research enforcement via webRequest ======
-  setupWebRequestEnforcement() {
-    try {
-      // Cancel/redirect phase
-      chrome.webRequest.onBeforeRequest.addListener(
-        (details) => this.handleBeforeRequest(details),
-        { urls: ['<all_urls>'] },
-        ['blocking']
-      );
-
-      // Headers phase
-      chrome.webRequest.onBeforeSendHeaders.addListener(
-        (details) => this.handleBeforeSendHeaders(details),
-        { urls: ['<all_urls>'] },
-        ['blocking', 'requestHeaders', 'extraHeaders']
-      );
-    } catch (e) {
-      console.warn('webRequest listeners may require permissions:', e.message);
-    }
-  }
+  // webRequest-based enforcement removed for MV3 compliance
 
   isThirdParty(details) {
     try {
@@ -424,7 +400,7 @@ class DataGuardianBackground {
               action: { type: 'block' },
               condition: {
                 urlFilter: domain,
-                resourceTypes: ['script', 'xmlhttprequest', 'image', 'sub_frame', 'ping', 'beacon']
+                resourceTypes: ['script', 'xmlhttprequest', 'image', 'sub_frame', 'ping']
               }
             });
           });
