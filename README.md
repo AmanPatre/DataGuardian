@@ -1,308 +1,181 @@
-## DataGuardian Chrome Extension (Frontend)
+# DataGuardian: Your Digital Privacy Guardian 🛡️
 
-This is the Chrome extension UI for DataGuardian. It shows an easy privacy snapshot for the current site, counts tracker categories, and lets you switch privacy modes: Stealth, Research, or None. You can also block trackers by category for the current site.
+**Tagline:** "Know, Control, and Protect Every Byte of Your Data."
 
-The backend API (in `../backend/`) does the heavy lifting (headless visit + tracker detection + AI summary). This extension displays the results and applies your per‑site privacy choices.
+DataGuardian is a comprehensive browser extension designed to act as a powerful, user-friendly privacy dashboard. It demystifies the opaque world of online data tracking by meticulously identifying and categorizing trackers, leveraging advanced AI to simplify complex privacy policies, and providing users with granular, real-time control over their personal information.
 
----
+## The Problem: A Digital World Built on Hidden Data Exchange
 
-## What You Get
+The modern internet operates on a foundation of data. While this enables incredible services, it has created a significant power imbalance. Users are routinely monitored across websites by a vast network of third-party trackers, and the "agreements" governing this data collection—privacy policies—are intentionally dense, lengthy, and filled with legal jargon.
 
-- Simple popup that shows:
-  - AI privacy one‑liners: what is collected, who it’s shared with, and a key risk
-  - Tracker counts by category (Advertising, Analytics, Social, CDN/Utility, Tag Manager, Unknown)
-  - A grade that reflects the site’s privacy score
-- One‑click privacy modes:
-  - Stealth: block known trackers aggressively
-  - Research: reduce tracking identifiers while keeping sites usable
-  - None: turn protections off for the current site
-- Per‑site settings are remembered using `chrome.storage`
+This leads to critical challenges for every internet user:
 
----
+**Pervasive Invisibility:** Users have no easy way to see the sheer volume of trackers operating silently on a given webpage. This tracking builds a detailed profile of their behavior, interests, and personal life without their explicit, informed consent.
 
-## Quick Start
+**Weaponized Complexity:** Privacy policies are a form of "malicious compliance." They technically disclose data practices but in a format that is nearly impossible for a non-lawyer to understand, rendering the concept of consent meaningless.
 
-1. Build the extension
+**Illusion of Control:** Standard browser settings offer minimal, all-or-nothing controls. Users are forced to either accept invasive tracking to use a service or opt out entirely, lacking the tools to make nuanced decisions about their data.
 
-```bash
-cd frontend
-npm install
-npm run build
-```
+DataGuardian was built to systematically dismantle these problems by replacing opacity with transparency and powerlessness with empowerment.
 
-2. Load in Chrome
+## 🚶 A User's Journey Through DataGuardian
 
-- Open `chrome://extensions`
-- Turn on Developer Mode
-- Click “Load unpacked” and select `frontend/dist`
-- Pin “DataGuardian” and click the icon to open the popup
+To understand how DataGuardian works in practice, let's walk through the user experience from the first click to taking full control of your privacy.
 
-3. (Optional) Run the backend API
+### 1. The First Glance: The Popup View
 
-The popup can show richer data when the API is running. See the project root `README.md` for backend setup. Typical steps:
+When you're on a website and click the DataGuardian icon in your browser's toolbar, the Popup View appears. This is your initial, quick-glance dashboard.
 
-```bash
-cd ../backend
-npm install
-npm run start
-```
+Here's what you see and can do:
 
----
+- **Privacy Grade:** At the very top, you'll see a prominent letter grade (from A+ to F). This is the site's overall Privacy Score, giving you an immediate sense of its trustworthiness.
 
-## Using the Popup
+- **AI Privacy Snapshot:** A compact, AI-generated summary gives you the most critical information from the site's privacy policy in one-liners: what data they collect, who they share it with, and the single most important risk.
 
-- Open any website, then click the DataGuardian icon.
-- Read the AI Privacy Snapshot (3 short lines): Collects, Shares With, Key Risk.
-- Review tracker category counts (e.g., Advertising: 6, Analytics: 3).
-- Choose a mode:
-  - Stealth: blocks known trackers; may break some site features.
-  - Research: limits identifiers (pseudonymize/trim cookies/headers) to reduce tracking while keeping sites usable.
-  - None: disables protections for this site.
-- You can also toggle per‑category blocking (Ad, Analytics, Social) when available.
+- **Trackers Detected:** A clear list shows you the categories of trackers found on the page (e.g., Advertising, Analytics) and the total number of trackers detected.
 
-Changes are saved per site and take effect immediately (reloading the tab may be needed on some pages).
+- **One-Click Privacy Modes:** You have three simple but powerful buttons to control the site's behavior instantly:
+  - 🛡️ **Stealth:** The highest level of protection. Blocks all detected trackers, ensuring maximum privacy.
+  - 🔬 **Research:** A balanced mode. It allows tracker requests to go through but attempts to strip them of personal identifiers. This is useful for supporting websites without compromising your identity.
+  - ⚪ **None:** This is the default mode. All protections are off, and trackers are allowed to function as they normally would.
 
----
+Your choice of mode is saved for that specific site, so you can set your preferences once and DataGuardian will remember them on your next visit.
 
-## Screenshots (placeholders)
+### 2. The Deep Dive: The Full Report View
 
-Add your own images in each section.
+For those who want more than a summary, the "View Full Report & Controls" button at the bottom of the popup takes you to the comprehensive Full Report View. This is the central command center for your privacy on that site.
 
-### Extension Icon and Popup Entry
+This view is split into several key sections:
 
-<!-- Add image: toolbar with pinned extension icon -->
+#### a. AI-Powered Privacy Analysis
 
-### Popup – Privacy Snapshot
+At the top, you'll find the complete AI-driven summary of the website's privacy policy. It's broken down into simple, digestible questions and answers:
 
-<!-- Add image: top section showing Collects / Shares With / Key Risk -->
+- **What They Collect:** A clear, bulleted list of the types of data the site gathers.
+- **Who They Share With:** A list of the third parties or categories of partners your data is shared with.
+- **Key Privacy Risks:** The most significant potential risks to your privacy, explained in simple terms.
 
-### Popup – Tracker Categories
+This feature does the hard work for you, transforming a 10,000-word legal document into a few key takeaways.
 
-<!-- Add image: list of categories with counts and icons -->
+#### b. Granular Privacy Controls
 
-### Popup – Mode Toggles
+Below the AI analysis is the Privacy Controls panel. This is where you can move beyond the pre-set modes and become the master of your data.
 
-<!-- Add image: Stealth / Research / None buttons and description -->
+- **Per-Category Toggles:** You'll see a list of all tracker categories detected (Advertising, Social, Analytics, etc.), each with its own on/off toggle.
+- **Customized Protection:** Don't want to be tracked by social media widgets but are okay with the site's analytics? Simply flip the switch for the "Social" category to OFF. Your custom ruleset is automatically saved for this site.
 
-### Full Report Navigation
+#### c. Interactive Data Flow Visualization
 
-<!-- Add image: button “View Full Report & Controls” -->
+Finally, this view features a powerful visualization of the tracker network.
 
----
+- **See Your Data's Journey:** This interactive graph shows you a map of where your data is going. The central node is the website you're on, and it's connected to all the third-party companies that are tracking you.
+- **Explore the Network:** You can click and drag the nodes to see the connections more clearly, providing a stark visual representation of the often-hidden data-sharing ecosystem you've entered just by visiting a single webpage.
 
-## Permissions (Why They’re Needed)
+This walkthrough from the simple popup to the detailed report allows you to engage with your privacy at the level you're comfortable with, whether it's a one-click fix or a fine-tuned set of custom rules.
 
-- `tabs`, `activeTab`: to read the current tab’s URL and update UI/actions per site
-- `storage`: to remember your site‑specific settings
-- `scripting`: to inject lightweight blocking/instrumentation (e.g., wrap fetch/XHR, script src guards)
-- `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`: for rule‑based network filtering (where used)
-- `webRequest`, `webRequestBlocking`: for additional request‑level controls on some pages
-- `contentSettings`, `notifications`, `webNavigation`, `cookies`: to apply your choices for cookies/notifications and respond to navigation changes
-- `host_permissions: <all_urls>`: to work on any site you visit
-
-Note: Some Chrome pages (e.g., Chrome Web Store) restrict extension behavior by design.
-
----
-
-## How It Works (Frontend)
-
-- The popup UI is built with React + Vite.
-- `src/pages/PopupView.jsx` renders:
-  - AI one‑liners from the backend summary (if available)
-  - Tracker category counts (derived from analysis)
-  - Mode buttons and per‑category toggles
-- `src/utils/privacyManager.js` handles:
-  - Persisting settings by site (`chrome.storage.local`)
-  - Applying settings (e.g., script guards; wrapping `fetch`/XHR) when enabled
-  - “Research” mode helpers (strip IDs/cookies, add a stable per‑site pseudonym header)
-
----
-
-## Backend Integration (API)
-
-The extension expects the backend API to provide analysis results. Core endpoints:
-
-- `POST /api/sites/analyze`
-
-  - Body: `{ url: string, simplifiedPolicy?: string }`
-  - Returns: `{ success, site: { url, trackers, score, grade, category, aiSummary } }`
-
-- `GET /api/sites/network?url=<encodedUrl>`
-  - Returns nodes/links describing the site→tracker network
-
-If the backend is not running, the UI still works but shows limited information (no fresh AI summary).
-
----
-
-## How It Works (End‑to‑End, Simple)
-
-1. You open a website and click the DataGuardian icon.
-2. The extension (or a client) sends the page URL to the backend: `POST /api/sites/analyze`.
-3. The backend uses a headless browser to visit the page, watches network requests, and flags tracker domains.
-4. The backend asks Google Gemini for an easy privacy summary (or uses a safe fallback when AI is unavailable).
-5. The backend computes a score and grade, saves the result (if MongoDB is connected), and returns everything.
-6. The popup shows the AI one‑liners, tracker counts by category, and your privacy mode options.
-
-Notes:
-
-- Successful AI results are cached for 48 hours; failed AI attempts are cached for 30 minutes to avoid retry storms.
-- MongoDB is optional: if not connected, you still get live results, but they won’t be stored.
-
----
-
-## Backend: Quick Overview
-
-- Tech: Node.js, Express, Puppeteer, Mongoose, Google Generative AI (Gemini)
-- Env vars (in `backend/.env`):
-  - `PORT=5000`
-  - `MONGO_URI=mongodb://localhost:27017/dataguardian` (optional but recommended)
-  - `GEMINI_API_KEY=...` (optional; without it, the backend returns a sensible fallback summary)
-- Security & performance:
-  - Helmet security headers, request logging
-  - Rate limit on `/api/` (100 req / 15 min / IP)
-  - JSON body limit 10 MB
-  - In‑memory AI response cache (24h)
-
-### Main Endpoints (with examples)
-
-- Analyze a site
-
-```bash
-curl -X POST http://localhost:5000/api/sites/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com"}'
-```
-
-Response (shape):
-
-```json
-{
-  "success": true,
-  "site": {
-    "url": "https://example.com",
-    "score": 72,
-    "grade": "B-",
-    "category": "Good",
-    "trackers": ["doubleclick.net", "googletagmanager.com"],
-    "trackerCount": 2,
-    "simplifiedPolicy": null,
-    "aiSummary": {
-      "success": true,
-      "summary": {
-        "whatTheyCollect": ["Browsing behavior", "Device info"],
-        "whoTheyShareWith": ["Google"],
-        "howLongTheyKeep": "Varies by service",
-        "keyRisks": ["Behavioral profiling for advertising"],
-        "trackerBreakdown": ["doubleclick.net: Google's advertising network"]
-      },
-      "trackerCount": 2,
-      "trackerDetails": [
-        {
-          "domain": "doubleclick.net",
-          "name": "Google Ads",
-          "category": "Advertising",
-          "company": "Google"
-        }
-      ]
-    },
-    "lastAnalyzed": "2025-01-01T00:00:00.000Z",
-    "summary": "This site has good privacy practices but uses some tracking (2 trackers). Your data may be shared with Google."
-  }
-}
-```
-
-- Network graph for a site
-
-```bash
-curl "http://localhost:5000/api/sites/network?url=https%3A%2F%2Fexample.com"
-```
-
-Response (shape):
-
-```json
-{
-  "success": true,
-  "nodes": [
-    {
-      "id": "https://example.com",
-      "type": "site",
-      "label": "example.com",
-      "score": 72,
-      "category": "Good"
-    },
-    {
-      "id": "doubleclick.net",
-      "type": "tracker",
-      "label": "Google Ads",
-      "category": "Advertising",
-      "company": "Google"
-    }
-  ],
-  "links": [
-    {
-      "source": "https://example.com",
-      "target": "doubleclick.net",
-      "type": "Advertising"
-    }
-  ],
-  "aiSummary": {},
-  "userSummary": "..."
-}
-```
-
----
-
-## Scoring & Grades (Simple Rules)
-
-- Trackers matter most (up to 40 points): fewer trackers → higher score.
-- HTTPS adds up to 10 points.
-- Policy hints (keywords) add or subtract up to 30 points.
-- AI risk signals adjust up to ±20 points (e.g., fewer risks → bonus; high‑risk partners → penalties).
-- Final score is 0–100, then mapped to grade (A+ → F) and category (Excellent → Very Poor).
-
-Categories used for trackers include: Advertising, Analytics, Social, Tag Manager, CDN/Utility, and Unknown.
-
----
-
-## Headless Analysis Notes (Puppeteer)
-
-- Launches Chromium headless with safe defaults for CI/containers.
-- Observes all requests and flags trackers by known lists and common URL patterns (e.g., `/analytics`, `pixel`, `telemetry`).
-- Simulates small interactions (scroll, attempt cookie‑consent) to reveal lazy‑loaded trackers.
-
-Tip: For deeper coverage, extend domain lists or increase waiting/interaction time in `backend/utility/trackerService.js`.
-
-## Development
-
-Dev server for React (optional – for UI iteration):
-
-```bash
-npm run dev
-```
-
-For the actual extension popup, build and load `dist` in Chrome (MV3).
-
----
-
-## Troubleshooting
-
-- No data/blank UI: ensure the popup is opened on a normal website (not system pages).
-- Mode changes don’t apply: try reloading the active tab.
-- AI summary missing: the backend may be down or lacks `GEMINI_API_KEY`.
-- Tracker counts look low: trackers can be event‑driven; interact with the page (scroll, click) and re‑analyze on the backend.
-
----
-
-## Folder Pointers
-
-- `public/manifest.json` – Chrome MV3 permissions and entry points
-- `public/background.js` – background service worker
-- `public/content.js` – content script injected into pages
-- `src/pages/PopupView.jsx` – main popup UI
-- `src/utils/privacyManager.js` – per‑site settings and blocking helpers
-
----
-
-## License
-
-For research and educational use. Review for your compliance requirements before production.
+## 🛠️ Architectural Overview
+
+DataGuardian operates on a client-server architecture, comprising two main parts:
+
+**Frontend (The Browser Extension):** Built with React and Vite, this is the user-facing component that lives in the browser. It's responsible for the user interface, real-time tracker interception, and managing user settings locally.
+
+**Backend (The Analysis Engine):** A Node.js/Express server that handles the heavy lifting of AI-powered analysis. It scrapes privacy policies, communicates with the Gemini API, and caches the results in a MongoDB database with a Redis layer for speed.
+
+This separation ensures the browser extension remains lightweight and fast, while the complex, resource-intensive tasks are offloaded to a powerful server.
+
+## Functionality Deep Dive: How Each Feature Works
+
+### 1. The Engine Room: Real-Time Tracker Detection and Blocking
+
+This is the heart of the extension, operating silently to protect you on every webpage.
+
+- **The Service Worker** (`frontend/public/background.js`): This is the persistent core of the extension. As a service worker, it runs independently of any single tab, allowing it to monitor all network traffic from the browser.
+
+- **Intercepting Requests** (chrome.webRequest API): The background.js script registers a listener with `chrome.webRequest.onBeforeRequest`. This powerful API allows the extension to intercept every single outgoing network request before it is sent.
+
+- **The Rule Set** (`frontend/public/privacy_rules.json`): This file is our ground truth. It's a comprehensive JSON database containing the domain signatures of thousands of known trackers, neatly organized into categories.
+
+### 2. User Controls & Settings Persistence
+
+The `frontend/src/utils/privacyManager.js` module ensures your choices are respected and remembered through centralized state management and persistent storage using `chrome.storage.local`.
+
+### 3. AI-Powered Privacy Policy Demystification
+
+This feature transforms legal walls of text into actionable intelligence through:
+
+- Backend routing and caching
+- Web scraping of privacy policies
+- Gemini API integration for intelligent analysis
+- Structured data storage and retrieval
+
+### 4. At-a-Glance Privacy Scoring
+
+The `frontend/src/utils/scoring.js` provides immediate assessment using a weighted algorithm that deducts points based on tracker volume and severity.
+
+### 5. Interactive Data Flow Visualization
+
+Built with D3.js force simulation to create an organic, interactive graph showing the network of companies receiving your data.
+
+## 💻 Technology Stack
+
+- **Frontend:** React 18, Vite, Tailwind CSS
+- **Data Visualization:** D3.js
+- **Backend:** Node.js, Express.js
+- **Database:** MongoDB with Mongoose ODM
+- **Caching:** Redis
+- **AI Engine:** Google Gemini API
+- **Browser Integration:** Chrome Extension Manifest V3 APIs
+
+## 🚀 Getting Started: Local Development Setup
+
+Follow these steps to set up and run the DataGuardian extension on your local machine.
+
+### Prerequisites
+
+- Node.js (v18 or later) and npm
+- Google Chrome or another Chromium-based browser (Brave, Edge)
+- Access to a MongoDB database (local or cloud-based)
+- A Google Gemini API key
+
+### Installation & Setup
+
+1. **Clone the Repository:**
+
+   ```bash
+   git clone https://github.com/amanpatre/dataguardian_test.git
+   cd dataguardian_test
+   ```
+
+2. **Configure the Backend:**
+
+   ```bash
+   cd backend
+   cp .env.example .env
+   # Edit the .env file and add your MongoDB connection string and Gemini API key
+   npm install
+   ```
+
+3. **Configure the Frontend:**
+
+   ```bash
+   cd ../frontend
+   npm install
+   ```
+
+4. **Run the System:**
+
+   ```bash
+   # In the backend directory
+   npm start
+
+   # In the frontend directory
+   npm run build
+   ```
+
+### Loading the Unpacked Extension in Chrome
+
+1. Open Chrome and navigate to `chrome://extensions`
+2. Enable "Developer mode" using the toggle switch in the top-right corner
+3. Click the "Load unpacked" button that appears
+4. Navigate to the frontend directory of your project and select the `dist` folder
+5. The DataGuardian extension icon should now appear in your browser's toolbar, ready for testing and development!
