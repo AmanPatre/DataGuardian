@@ -47,10 +47,8 @@ const getIcon = (iconName) => {
   );
 };
 
-// removed: PrivacyMeter (unused)
-
-// A compact version of the AI Analysis for the popup
-const CompactAIPrivacyAnalysis = ({ summary, onNavigate }) => {
+// [MODIFIED] This component now creates concise one-liner summaries.
+const CompactAIPrivacyAnalysis = ({ summary }) => {
   if (!summary || !summary.whatTheyCollect) {
     return (
       <p className="text-xs text-center text-gray-500 py-2">
@@ -59,55 +57,52 @@ const CompactAIPrivacyAnalysis = ({ summary, onNavigate }) => {
     );
   }
 
-  // Limit to N words and report if truncated
-  const truncateWordsWithFlag = (text, limit = 40) => {
-    if (!text || typeof text !== "string") return { text, truncated: false };
-    const clean = text.trim();
-    const words = clean.split(/\s+/).filter(Boolean);
-    if (words.length <= limit) return { text: clean, truncated: false };
-    return { text: words.slice(0, limit).join(" ") + "…", truncated: true };
+  // --- NEW: Logic to create one-liner summaries ---
+  const getRiskSummary = () => {
+    const { keyRisks = [] } = summary;
+    if (keyRisks.length === 0) return "No critical privacy risks were found.";
+    return keyRisks[0]; // Return only the first, most important risk.
   };
 
-  const renderSection = (title, data, icon) => {
-    if (!data || data.length === 0) return null;
-    const text = Array.isArray(data) ? data.join(", ") : String(data);
-    const { text: limited, truncated } = truncateWordsWithFlag(text, 40);
-    return (
-      <div className="flex items-start gap-2 text-xs">
-        {icon}
-        <p className="flex-1">
-          <span className="font-semibold">{title}:</span> {limited}
-          {truncated && (
-            <button
-              type="button"
-              className="text-blue-600 hover:underline ml-1"
-              onClick={() => onNavigate && onNavigate("fullReport")}
-            >
-              More
-            </button>
-          )}
-        </p>
-      </div>
-    );
+  const getCollectionSummary = () => {
+    const { whatTheyCollect = [] } = summary;
+    if (whatTheyCollect.length === 0) return "No specific data collection points identified.";
+    const firstItem = whatTheyCollect[0];
+    const count = whatTheyCollect.length;
+    if (count === 1) return `${firstItem}.`;
+    return `${firstItem} and ${count - 1} more types.`;
   };
+
+  const getSharingSummary = () => {
+    const { whoTheyShareWith = [] } = summary;
+    if (whoTheyShareWith.length === 0) return "No data sharing partners were identified.";
+    const firstItem = whoTheyShareWith[0];
+    const count = whoTheyShareWith.length;
+    if (count === 1) return `${firstItem}.`;
+    return `${firstItem} and ${count - 1} other partners.`;
+  };
+
 
   return (
-    <div className="space-y-2 text-left">
-      {renderSection(
-        "Collects",
-        summary.whatTheyCollect,
+    <div className="space-y-3 text-left">
+      <div className="flex items-start gap-2 text-xs">
         <InformationCircleIcon className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-      )}
-      {renderSection(
-        "Shares With",
-        summary.whoTheyShareWith,
+        <p className="flex-1">
+          <span className="font-semibold">Collects:</span> {getCollectionSummary()}
+        </p>
+      </div>
+      <div className="flex items-start gap-2 text-xs">
         <BuildingOfficeIcon className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
-      )}
-      {renderSection(
-        "Key Risks",
-        summary.keyRisks,
+        <p className="flex-1">
+          <span className="font-semibold">Shares With:</span> {getSharingSummary()}
+        </p>
+      </div>
+       <div className="flex items-start gap-2 text-xs">
         <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-      )}
+        <p className="flex-1">
+          <span className="font-semibold">Key Risk:</span> {getRiskSummary()}
+        </p>
+      </div>
     </div>
   );
 };
@@ -129,7 +124,6 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     (sum, count) => sum + count,
     0
   );
-  // removed: trackerCategoriesKey (no longer needed)
 
   useEffect(() => {
     const loadMode = async () => {
@@ -149,7 +143,6 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
 
   const setAllCategoryBlocking = async (enabled) => {
     try {
-      // General catch-all toggle if used elsewhere
       await privacyManager.updateSetting("blockTrackers", enabled, url);
     } catch {
       console.warn("blockTrackers toggle failed");
@@ -167,10 +160,6 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       /* noop */
     }
   };
-
-  // Removed Privacy Protection Level computation per request
-
-  // const privacyStats = getPrivacyImprovement();
 
   const getHostname = (urlString) => {
     try {
@@ -200,65 +189,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
         className="flex-1 p-4 space-y-3 no-scrollbar"
         style={{ overflow: "auto" }}
       >
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-800">Mode</p>
-              <p className="text-xs text-gray-500">
-                {privacyMode === "stealth"
-                  ? "Stealth: Block ALL trackers."
-                  : "Research: Share data anonymously (no IDs/cookies)"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={async () => {
-                  await privacyManager.setPrivacyMode("stealth");
-                  setPrivacyMode("stealth");
-                  await setAllCategoryBlocking(true);
-                  // Notify other views to refresh their toggles
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("privacyModeChanged", {
-                        detail: { mode: "stealth" },
-                      })
-                    );
-                  }
-                }}
-                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
-                  privacyMode === "stealth"
-                    ? "bg-red-600 text-white border-red-600"
-                    : "bg-white text-gray-700 border-gray-300"
-                }`}
-              >
-                Stealth
-              </button>
-              <button
-                onClick={async () => {
-                  await privacyManager.setPrivacyMode("research");
-                  setPrivacyMode("research");
-                  await setAllCategoryBlocking(false);
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("privacyModeChanged", {
-                        detail: { mode: "research" },
-                      })
-                    );
-                  }
-                }}
-                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
-                  privacyMode === "research"
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-700 border-gray-300"
-                }`}
-              >
-                Research
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Privacy Protection Level removed per request */}
+        
 
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex items-start gap-3 mb-3">
@@ -274,12 +205,9 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
               </p>
             </div>
           </div>
-          <CompactAIPrivacyAnalysis
-            summary={aiSummary?.summary}
-            onNavigate={onNavigate}
-          />
+          <CompactAIPrivacyAnalysis summary={aiSummary?.summary} />
         </div>
-
+        
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-sm font-semibold text-gray-800">
@@ -320,7 +248,62 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
             )}
           </div>
         </div>
-
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Mode</p>
+              <p className="text-xs text-gray-500">
+                {privacyMode === "stealth"
+                  ? "Stealth: Block ALL trackers."
+                  : "Research: Share data anonymously (no IDs/cookies)"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  await privacyManager.setPrivacyMode("stealth");
+                  setPrivacyMode("stealth");
+                  await setAllCategoryBlocking(true);
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("privacyModeChanged", {
+                        detail: { mode: "stealth" },
+                      })
+                    );
+                  }
+                }}
+                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
+                  privacyMode === "stealth"
+                    ? "bg-red-600 text-white border-red-600"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+              >
+                Stealth
+              </button>
+              <button
+                onClick={async () => {
+                  await privacyManager.setPrivacyMode("research");
+                  setPrivacyMode("research");
+                  await setAllCategoryBlocking(false);
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("privacyModeChanged", {
+                        detail: { mode: "research" },
+                      })
+                    );
+                  }
+                }}
+                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
+                  privacyMode === "research"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+              >
+                Research
+              </button>
+            </div>
+          </div>
+        </div>
         <button
           onClick={() => {
             if (typeof window !== "undefined" && window.scrollTo) {
