@@ -1,4 +1,3 @@
-// backend/controllers/siteController.js
 import Site from "../models/Site.js";
 import { detectTrackers } from "../utility/trackerService.js";
 import { generateAIPrivacySummary } from "../services/geminiService.js";
@@ -108,6 +107,45 @@ const analyzeSite = async (req, res) => {
 
     console.log(`🔍 Starting analysis for: ${url}`);
 
+    // [NEW] Automatic 48-hour cache validation logic
+    if (isDatabaseConnected()) {
+      const existingSite = await Site.findOne({ url });
+      if (existingSite) {
+        const fortyEightHoursAgo = new Date(
+          Date.now() - 48 * 60 * 60 * 1000
+        );
+        const isDataFresh = existingSite.lastAnalyzed > fortyEightHoursAgo;
+
+        if (isDataFresh) {
+          console.log(
+            `✅ Cache hit: Data for ${url} is fresh. Returning stored info.`
+          );
+          const response = {
+            success: true,
+            message: "Site data retrieved from cache",
+            site: {
+              url: existingSite.url,
+              score: existingSite.score,
+              grade: existingSite.grade,
+              category: existingSite.category,
+              trackers: existingSite.trackers,
+              trackerCount: existingSite.trackers.length,
+              simplifiedPolicy: existingSite.simplifiedPolicy,
+              aiSummary: existingSite.aiSummary,
+              lastAnalyzed: existingSite.lastAnalyzed,
+              summary: generateUserFriendlySummary(existingSite),
+            },
+          };
+          return res.status(200).json(response); // Use 200 for cache hit
+        }
+        console.log(
+          `⏱️ Cache stale: Data for ${url} is older than 48 hours. Re-analyzing.`
+        );
+      }
+    }
+
+    // --- If cache is missed or stale, proceed with full analysis ---
+
     // Step 1: Detect trackers
     console.log("📊 Detecting trackers...");
     const trackerResult = await detectTrackers(url);
@@ -148,31 +186,22 @@ const analyzeSite = async (req, res) => {
 
     if (isDatabaseConnected()) {
       try {
-        site = await Site.findOne({ url });
-        if (site) {
-          site.simplifiedPolicy = simplifiedPolicy;
-          site.trackers = detectedTrackers;
-          site.score = score;
-          site.grade = grade;
-          site.category = category;
-          site.aiSummary = aiSummary;
-          site.lastAnalyzed = new Date();
-
-          await site.save();
-          console.log("📝 Updated existing site record");
-        } else {
-          site = await Site.create({
-            url,
-            simplifiedPolicy,
-            score,
-            grade,
-            category,
-            trackers: detectedTrackers,
-            aiSummary,
-            lastAnalyzed: new Date(),
-          });
-          console.log("📝 Created new site record");
-        }
+        // Use findOneAndUpdate with upsert:true to simplify logic
+        const siteData = {
+          url,
+          simplifiedPolicy,
+          score,
+          grade,
+          category,
+          trackers: detectedTrackers,
+          aiSummary,
+          lastAnalyzed: new Date(),
+        };
+        site = await Site.findOneAndUpdate({ url }, siteData, {
+          new: true,
+          upsert: true,
+        });
+        console.log("📝 Upserted site record in database");
       } catch (dbErr) {
         console.warn("⚠️ Database operation failed:", dbErr.message);
         dbError = dbErr.message;
