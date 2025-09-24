@@ -35,7 +35,6 @@ class PrivacyManager {
       });
 
       this.settings = result[storageKey] || this.getDefaultSettings();
-      console.log(`📋 Loaded settings for ${domain}:`, this.settings);
     } catch (error) {
       console.error('Failed to load privacy settings:', error);
       this.settings = this.getDefaultSettings();
@@ -79,6 +78,89 @@ class PrivacyManager {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('privacyModeChanged', { detail: { mode: normalized } }));
+    }
+  }
+
+  // ===== Site-specific privacy mode (none | research | stealth) =====
+  async getSitePrivacyMode(siteUrl = null) {
+    const defaultMode = 'none';
+    if (!this.isExtension) return defaultMode;
+
+    try {
+      // Determine domain key
+      if (!siteUrl) {
+        const [tab] = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+        siteUrl = tab?.url;
+      }
+
+      const domain = this.getDomainFromUrl(siteUrl);
+      const key = `siteMode_${domain}`;
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get([key], (r) => resolve(r || {}));
+      });
+      const mode = result[key];
+      return mode === 'stealth' || mode === 'research' || mode === 'none'
+        ? mode
+        : defaultMode;
+    } catch (_) {
+      return defaultMode;
+    }
+  }
+
+  async setSitePrivacyMode(siteUrl = null, mode = 'none') {
+    if (!this.isExtension) return;
+
+    const normalized = ['stealth', 'research', 'none'].includes(mode)
+      ? mode
+      : 'none';
+
+    try {
+      if (!siteUrl) {
+        const [tab] = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+        });
+        siteUrl = tab?.url;
+      }
+      const domain = this.getDomainFromUrl(siteUrl);
+      const key = `siteMode_${domain}`;
+
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.set({ [key]: normalized }, () => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve();
+        });
+      });
+
+      // Broadcast UI update
+      try {
+        chrome.runtime.sendMessage({ type: 'SITE_PRIVACY_MODE_CHANGED', domain, mode: normalized });
+      } catch (_) { }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sitePrivacyModeChanged', { detail: { domain, mode: normalized } }));
+      }
+
+      // Reload active tab so network rules take effect
+      await this.reloadActiveTab();
+    } catch (e) {
+      console.error('Failed to set site privacy mode:', e);
+    }
+  }
+
+  async reloadActiveTab() {
+    if (!this.isExtension) return;
+    try {
+      const [tab] = await new Promise((resolve) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+      });
+      if (tab && tab.id) {
+        await new Promise((resolve) => {
+          chrome.tabs.reload(tab.id, {}, resolve);
+        });
+      }
+    } catch (e) {
+      console.warn('Could not reload active tab:', e);
     }
   }
 
@@ -215,7 +297,7 @@ class PrivacyManager {
         });
       });
 
-      console.log(`💾 Saved settings for ${domain}:`, this.settings);
+
     } catch (error) {
       console.error('Failed to save privacy settings:', error);
     }
@@ -661,10 +743,7 @@ class PrivacyManager {
 
   // Show notification about privacy action
   showPrivacyNotification(message, type = 'info') {
-    if (!this.isExtension) {
-      console.log(`DataGuardian: ${message}`);
-      return;
-    }
+    if (!this.isExtension) { return; }
 
     if (chrome.notifications && chrome.notifications.create) {
       chrome.notifications.create({
@@ -673,12 +752,10 @@ class PrivacyManager {
         title: 'DataGuardian Privacy',
         message: message
       }).catch(() => {
-        // Fallback to console if notifications not available
-        console.log(`DataGuardian Privacy: ${message}`);
+        // ignore
       });
     } else {
-      // Fallback to console if notifications API not available
-      console.log(`DataGuardian Privacy: ${message}`);
+      // ignore when notifications API not available
     }
   }
 }

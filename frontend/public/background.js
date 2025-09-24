@@ -11,13 +11,11 @@ class DataGuardianBackground {
   }
 
   async init() {
-    console.log('DataGuardian Background Script Starting...');
     await this.loadSettings();
     await this.loadPrivacyMode();
     this.setupEventListeners();
     this.setupRequestBlocking();
     this.setupWebRequestEnforcement();
-    console.log('DataGuardian Background Script Ready');
   }
 
   // [UPDATE] Creates a consistent, complete list of default settings.
@@ -53,7 +51,7 @@ class DataGuardianBackground {
       } else {
         this.settings = { ...defaults };
       }
-      console.log(`📋 Loaded settings for ${domain}:`, this.settings);
+
     } catch (error) {
       console.error('Failed to load settings, falling back to defaults:', error);
       this.settings = { ...defaults };
@@ -73,14 +71,14 @@ class DataGuardianBackground {
 
   async saveSettings(siteUrl = null) {
     if (!siteUrl) {
-      console.log('No site URL provided for saving settings');
+
       return;
     }
     try {
       const domain = this.getDomainFromUrl(siteUrl);
       const storageKey = `privacySettings_${domain}`;
       await chrome.storage.local.set({ [storageKey]: this.settings });
-      console.log(`💾 Settings saved for ${domain}:`, this.settings);
+
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
@@ -98,7 +96,7 @@ class DataGuardianBackground {
         for (const [key, change] of Object.entries(changes)) {
           if (key === 'privacyMode') {
             this.privacyMode = change.newValue || 'research';
-            console.log('Privacy mode changed:', this.privacyMode);
+
             this.setupRequestBlocking();
             continue;
           }
@@ -115,7 +113,7 @@ class DataGuardianBackground {
             if (activeDomain && changedDomain === activeDomain) {
               const defaults = this.getDefaultSettings();
               this.settings = { ...defaults, ...(change.newValue || {}) };
-              console.log('Settings updated from storage:', this.settings);
+
               this.setupRequestBlocking();
             }
           }
@@ -134,7 +132,7 @@ class DataGuardianBackground {
           this.setupRequestBlocking();
         }
       } catch (error) {
-        console.log("Could not get tab info on activation:", error.message);
+
       }
     });
 
@@ -435,9 +433,9 @@ class DataGuardianBackground {
 
       if (newRules.length > 0) {
         await chrome.declarativeNetRequest.updateDynamicRules({ addRules: newRules });
-        console.log(`🛡️ DataGuardian: Activated ${newRules.length} blocking rules.`);
+
       } else {
-        console.log('🔓 DataGuardian: All tracker blocking is currently disabled for this site.');
+
       }
     } catch (error) {
       console.error('Failed to update blocking rules:', error);
@@ -452,7 +450,7 @@ class DataGuardianBackground {
     try {
       const currentTab = await chrome.tabs.get(tab.id).catch(() => null);
       if (!currentTab) {
-        console.log(`Tab ${tab.id} no longer exists, skipping settings application`);
+
         return;
       }
       if (this.settings.blockNotifications) {
@@ -501,7 +499,7 @@ class DataGuardianBackground {
       try {
         await this.applySettingsToTab(tab);
       } catch (error) {
-        console.log(`Could not apply settings to tab ${tab.id}:`, error.message);
+
       }
     }
   }

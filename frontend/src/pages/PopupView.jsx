@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import ModernHeader from "../components/ModernHeader";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { PrivacyManager } from "../utils/privacyManager";
+import { recalculateScoreAndGrade } from "../utils/scoring";
 import {
   BugAntIcon,
   ChartPieIcon,
@@ -66,7 +67,8 @@ const CompactAIPrivacyAnalysis = ({ summary }) => {
 
   const getCollectionSummary = () => {
     const { whatTheyCollect = [] } = summary;
-    if (whatTheyCollect.length === 0) return "No specific data collection points identified.";
+    if (whatTheyCollect.length === 0)
+      return "No specific data collection points identified.";
     const firstItem = whatTheyCollect[0];
     const count = whatTheyCollect.length;
     if (count === 1) return `${firstItem}.`;
@@ -75,29 +77,31 @@ const CompactAIPrivacyAnalysis = ({ summary }) => {
 
   const getSharingSummary = () => {
     const { whoTheyShareWith = [] } = summary;
-    if (whoTheyShareWith.length === 0) return "No data sharing partners were identified.";
+    if (whoTheyShareWith.length === 0)
+      return "No data sharing partners were identified.";
     const firstItem = whoTheyShareWith[0];
     const count = whoTheyShareWith.length;
     if (count === 1) return `${firstItem}.`;
     return `${firstItem} and ${count - 1} other partners.`;
   };
 
-
   return (
     <div className="space-y-3 text-left">
       <div className="flex items-start gap-2 text-xs">
         <InformationCircleIcon className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
         <p className="flex-1">
-          <span className="font-semibold">Collects:</span> {getCollectionSummary()}
+          <span className="font-semibold">Collects:</span>{" "}
+          {getCollectionSummary()}
         </p>
       </div>
       <div className="flex items-start gap-2 text-xs">
         <BuildingOfficeIcon className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
         <p className="flex-1">
-          <span className="font-semibold">Shares With:</span> {getSharingSummary()}
+          <span className="font-semibold">Shares With:</span>{" "}
+          {getSharingSummary()}
         </p>
       </div>
-       <div className="flex items-start gap-2 text-xs">
+      <div className="flex items-start gap-2 text-xs">
         <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
         <p className="flex-1">
           <span className="font-semibold">Key Risk:</span> {getRiskSummary()}
@@ -111,6 +115,8 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
   const [privacyManager] = useState(new PrivacyManager());
   const [isLoading, setIsLoading] = useState(true);
   const [privacyMode, setPrivacyMode] = useState("none");
+  const [trackerSettings, setTrackerSettings] = useState({});
+  const [computedGrade, setComputedGrade] = useState(null);
 
   const {
     url = "Unknown site",
@@ -129,24 +135,17 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     const loadMode = async () => {
       setIsLoading(true);
       try {
-        // We still need to call loadSettings for the privacyManager to know the current URL
-        // for when the user clicks a button.
         await privacyManager.loadSettings(url);
+        const mode = await privacyManager.getSitePrivacyMode(url);
+        setPrivacyMode(mode || "none");
 
-        if (chrome && chrome.storage && url && url !== "Unknown site") {
-            const key = `site_settings_${url}`;
-            const result = await new Promise((resolve) => {
-                chrome.storage.local.get(key, (r) => resolve(r));
-            });
-
-            if (result[key] && result[key].privacyMode) {
-                setPrivacyMode(result[key].privacyMode);
-            } else {
-                setPrivacyMode('none');
-            }
-        } else {
-            setPrivacyMode('none');
-        }
+        // Initialize tracker settings from storage for detected categories
+        const settings = {};
+        Object.keys(trackers || {}).forEach((category) => {
+          const key = `block${category.replace(/[^a-zA-Z0-9]/g, "")}Trackers`;
+          settings[key] = privacyManager.getSetting(key);
+        });
+        setTrackerSettings(settings);
       } catch (error) {
         console.error("Failed to load privacy mode:", error);
         setPrivacyMode("none");
@@ -155,7 +154,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       }
     };
     loadMode();
-  }, [privacyManager, url]);
+  }, [privacyManager, url, trackers]);
 
   const setAllCategoryBlocking = async (enabled) => {
     try {
@@ -172,6 +171,14 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
           /* noop */
         }
       }
+      setTrackerSettings((prev) => {
+        const updated = { ...prev };
+        for (const category of trackerCategories) {
+          const key = `block${category.replace(/[^a-zA-Z0-9]/g, "")}Trackers`;
+          updated[key] = enabled;
+        }
+        return updated;
+      });
     } catch {
       /* noop */
     }
@@ -185,7 +192,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       return "this site";
     }
   };
-  
+
   const getModeDescription = () => {
     switch (privacyMode) {
       case "stealth":
@@ -198,6 +205,20 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
         return "Select a privacy mode.";
     }
   };
+
+  // Recalculate grade when tracker settings change
+  useEffect(() => {
+    if (!siteData || !aiSummary) return;
+    try {
+      const { grade: newGrade } = recalculateScoreAndGrade(
+        siteData,
+        trackerSettings
+      );
+      setComputedGrade(newGrade);
+    } catch {
+      setComputedGrade(null);
+    }
+  }, [trackerSettings, aiSummary, siteData]);
 
   if (isLoading) {
     return (
@@ -212,14 +233,12 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       className="w-[400px] flex flex-col bg-gray-50 no-scrollbar"
       style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
     >
-      <ModernHeader score={grade} isAnalyzing={false} />
+      <ModernHeader score={computedGrade || grade} isAnalyzing={false} />
 
       <div
         className="flex-1 p-4 space-y-3 no-scrollbar"
         style={{ overflow: "auto" }}
       >
-        
-
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex items-start gap-3 mb-3">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -236,7 +255,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
           </div>
           <CompactAIPrivacyAnalysis summary={aiSummary?.summary} />
         </div>
-        
+
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-sm font-semibold text-gray-800">
@@ -281,23 +300,15 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-800">Mode</p>
-              <p className="text-xs text-gray-500">
-                {getModeDescription()}
-              </p>
+              <p className="text-xs text-gray-500">{getModeDescription()}</p>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={async () => {
                   await privacyManager.setPrivacyMode("stealth");
+                  await privacyManager.setSitePrivacyMode(url, "stealth");
                   setPrivacyMode("stealth");
                   await setAllCategoryBlocking(true);
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("privacyModeChanged", {
-                        detail: { mode: "stealth" },
-                      })
-                    );
-                  }
                 }}
                 className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
                   privacyMode === "stealth"
@@ -310,15 +321,9 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
               <button
                 onClick={async () => {
                   await privacyManager.setPrivacyMode("research");
+                  await privacyManager.setSitePrivacyMode(url, "research");
                   setPrivacyMode("research");
                   await setAllCategoryBlocking(false);
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("privacyModeChanged", {
-                        detail: { mode: "research" },
-                      })
-                    );
-                  }
                 }}
                 className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
                   privacyMode === "research"
@@ -331,15 +336,9 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
               <button
                 onClick={async () => {
                   await privacyManager.setPrivacyMode("none");
+                  await privacyManager.setSitePrivacyMode(url, "none");
                   setPrivacyMode("none");
                   await setAllCategoryBlocking(false);
-                  if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new CustomEvent("privacyModeChanged", {
-                        detail: { mode: "none" },
-                      })
-                    );
-                  }
                 }}
                 className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
                   privacyMode === "none"

@@ -9,9 +9,7 @@ class DataGuardianContentScript {
   }
 
   async init() {
-    console.log('🛡️ DataGuardian Content Script: Initializing...');
-    console.log('📊 Page URL:', window.location.href);
-    console.log('⏰ Initialization time:', new Date().toLocaleTimeString());
+
 
     // Load tracker domains from background script
     await this.loadTrackerDomains();
@@ -22,9 +20,7 @@ class DataGuardianContentScript {
     // Set up DOM monitoring for new scripts
     this.setupDOMMonitoring();
 
-    console.log('🛡️ DataGuardian Content Script: Ready');
-    console.log('📋 Current settings:', this.settings);
-    console.log('🎯 Ready to block trackers based on user preferences');
+
 
     // Try to reconnect to background script periodically
     this.setupBackgroundReconnection();
@@ -51,14 +47,12 @@ class DataGuardianContentScript {
 
       if (response && response.success) {
         this.settings = response.settings;
-        console.log('📋 DataGuardian: Loaded site-specific settings from background:', this.settings);
-        console.log('🌐 Current site:', window.location.hostname);
+
       } else {
-        console.log('📋 DataGuardian: No response from background, using defaults:', this.settings);
+
       }
     } catch (error) {
-      console.log('📋 DataGuardian: Background script not available, using defaults:', this.settings);
-      console.log('💡 This is normal if the extension is still loading');
+
     }
   }
 
@@ -70,9 +64,6 @@ class DataGuardianContentScript {
 
       if (this.shouldBlockRequest(url)) {
         this.blockedRequests.add(url);
-        console.log('🚫 DataGuardian: Blocked fetch request to:', url);
-        console.log('📊 Total blocked requests:', this.blockedRequests.size);
-        console.log('⏰ Block time:', new Date().toLocaleTimeString());
         return Promise.reject(new Error('Blocked by DataGuardian privacy protection'));
       }
 
@@ -84,9 +75,6 @@ class DataGuardianContentScript {
     XMLHttpRequest.prototype.open = function (method, url, ...args) {
       if (this.shouldBlockRequest(url)) {
         this.blockedRequests.add(url);
-        console.log('🚫 DataGuardian: Blocked XHR request to:', url);
-        console.log('📊 Total blocked requests:', this.blockedRequests.size);
-        console.log('⏰ Block time:', new Date().toLocaleTimeString());
         return; // Block the request
       }
       return originalXHROpen.call(this, method, url, ...args);
@@ -103,7 +91,6 @@ class DataGuardianContentScript {
           Object.defineProperty(element, 'src', {
             set: function (value) {
               if (this.shouldBlockRequest(value)) {
-                console.log('🚫 DataGuardian: Blocked script loading:', value);
                 return; // Don't set the src
               }
               originalSrcSetter.call(this, value);
@@ -127,7 +114,6 @@ class DataGuardianContentScript {
         mutation.addedNodes.forEach((node) => {
           if (node.tagName === 'SCRIPT' && node.src) {
             if (this.shouldBlockRequest(node.src)) {
-              console.log('🚫 DataGuardian: Blocked dynamically added script:', node.src);
               node.remove();
             }
           }
@@ -217,8 +203,7 @@ class DataGuardianContentScript {
         const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
         if (response && response.success) {
           this.settings = response.settings;
-          console.log('🔄 DataGuardian: Reconnected to background script!');
-          console.log('📋 Updated settings:', this.settings);
+
           return; // Stop trying once connected
         }
       } catch (error) {
