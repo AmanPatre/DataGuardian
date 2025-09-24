@@ -7,137 +7,154 @@ import {
   ShieldExclamationIcon,
 } from "@heroicons/react/24/outline";
 
+// A more compact list item
+const InfoListItem = ({ children, icon }) => (
+  <li className="flex items-start gap-2 py-1">
+    <span className="mt-1 flex-shrink-0 text-blue-500">{icon}</span>
+    <span className="text-gray-700 text-xs">{children}</span>
+  </li>
+);
+
+// A more compact section component
+const AnalysisSection = ({ title, icon, children }) => (
+  <div className="py-2.5">
+    <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
+      {icon}
+      {title}
+    </h3>
+    {children}
+  </div>
+);
+
+// A more compact card component
+const ExplainerCard = ({ children, colorClass = "border-yellow-400" }) => (
+  <div
+    className={`text-xs bg-gray-50/70 p-3 rounded-md border-l-4 ${colorClass}`}
+  >
+    {children}
+  </div>
+);
+
 const AIPrivacyAnalysis = ({ aiSummary, simplifiedPolicy }) => {
   const hasAISummary = aiSummary && aiSummary.success && aiSummary.summary;
 
-  const truncateWords = (text, maxWords = 75) => {
-    if (!text || typeof text !== "string") return text;
-    const words = text.trim().split(/\s+/);
-    if (words.length <= maxWords) return text;
-    return words.slice(0, maxWords).join(" ") + "…";
-  };
-
   if (!hasAISummary) {
     return (
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <h2 className="font-bold text-md mb-3 flex items-center gap-2">
+      <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+        <h2 className="font-bold text-sm mb-2 flex items-center gap-2">
           <ClipboardDocumentCheckIcon className="w-5 h-5 text-blue-600" />
           AI Privacy Analysis
         </h2>
         <div className="text-center py-4">
-          <div className="text-gray-400 mb-2">
-            <ClipboardDocumentCheckIcon className="w-8 h-8 mx-auto" />
-          </div>
-          <p className="text-sm text-gray-600">
+          <p className="text-xs text-gray-600">
             {aiSummary?.note || "AI analysis not available for this site"}
           </p>
-          {simplifiedPolicy && (
-            <p className="mt-2 text-xs text-gray-500 italic">
-              {simplifiedPolicy}
-            </p>
-          )}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-      <h2 className="font-bold text-md mb-3 flex items-center gap-2">
-        <ClipboardDocumentCheckIcon className="w-5 h-5 text-blue-600" />
-        AI Privacy Analysis
-      </h2>
+  const {
+    whatTheyCollect = [],
+    whoTheyShareWith = [],
+    howLongTheyKeep,
+    keyRisks = [],
+    trackerBreakdown = [],
+  } = aiSummary.summary;
 
-      <div className="space-y-4">
+  return (
+    <div className="bg-white p-0">
+      <div className="divide-y divide-gray-100">
         {/* What They Collect */}
-        <div>
-          <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
-            <InformationCircleIcon className="w-4 h-4 text-blue-500" />
-            What They Collect:
-          </h3>
-          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-            {aiSummary.summary.whatTheyCollect
-              ?.slice(0, 3)
-              .map((item, index) => (
-                <li key={index}>{truncateWords(item, 60)}</li>
+        {whatTheyCollect.length > 0 && (
+          <AnalysisSection
+            title="What They Collect"
+            icon={<InformationCircleIcon className="w-5 h-5 text-blue-500" />}
+          >
+            <ul className="space-y-0.5">
+              {whatTheyCollect.slice(0, 4).map((item, index) => (
+                <InfoListItem
+                  key={index}
+                  icon={
+                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full mt-1"></div>
+                  }
+                >
+                  {item}
+                </InfoListItem>
               ))}
-          </ul>
-        </div>
+            </ul>
+          </AnalysisSection>
+        )}
 
         {/* Who They Share With */}
-        <div>
-          <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
-            <BuildingOfficeIcon className="w-4 h-4 text-purple-500" />
-            Who They Share With:
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {aiSummary.summary.whoTheyShareWith
-              ?.slice(0, 3)
-              .map((company, index) => (
-                <span
-                  key={index}
-                  className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full"
-                >
-                  {truncateWords(company, 12)}
-                </span>
+        {whoTheyShareWith.length > 0 && (
+          <AnalysisSection
+            title="Who They Share With"
+            icon={<BuildingOfficeIcon className="w-5 h-5 text-purple-500" />}
+          >
+            <div className="space-y-2">
+              {whoTheyShareWith.slice(0, 4).map((company, index) => (
+                <ExplainerCard key={index} colorClass="border-purple-400">
+                  {company}
+                </ExplainerCard>
               ))}
-            {aiSummary.summary.whoTheyShareWith?.length > 3 && (
-              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                +{aiSummary.summary.whoTheyShareWith.length - 3} more
-              </span>
-            )}
-          </div>
-        </div>
+            </div>
+          </AnalysisSection>
+        )}
 
-        {/* How Long They Keep It */}
-        <div>
-          <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
-            <ClockIcon className="w-4 h-4 text-orange-500" />
-            Data Retention:
-          </h3>
-          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 bg-orange-50 p-2 rounded">
-            {[aiSummary.summary.howLongTheyKeep || "Information not available"]
-              .filter(Boolean)
-              .slice(0, 1)
-              .map((t, i) => (
-                <li key={i}>{truncateWords(t, 60)}</li>
-              ))}
-          </ul>
-        </div>
+        {/* Data Retention */}
+        {howLongTheyKeep && (
+          <AnalysisSection
+            title="Data Retention"
+            icon={<ClockIcon className="w-5 h-5 text-orange-500" />}
+          >
+            <ExplainerCard colorClass="border-orange-400">
+              {howLongTheyKeep}
+            </ExplainerCard>
+          </AnalysisSection>
+        )}
 
         {/* Key Privacy Risks */}
-        <div>
-          <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
-            <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
-            Privacy Risks:
-          </h3>
-          <ul className="list-disc list-inside text-sm text-red-600 space-y-1 bg-red-50 p-2 rounded">
-            {aiSummary.summary.keyRisks?.slice(0, 3).map((risk, index) => (
-              <li key={index}>{truncateWords(risk, 60)}</li>
-            ))}
-          </ul>
-        </div>
+        {keyRisks.length > 0 && (
+          <AnalysisSection
+            title="Key Privacy Risks"
+            icon={
+              <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
+            }
+          >
+            <div className="bg-red-50/50 p-3 rounded-lg">
+              <ul className="space-y-0.5">
+                {keyRisks.slice(0, 4).map((risk, index) => (
+                  <InfoListItem
+                    key={index}
+                    icon={
+                      <ExclamationTriangleIcon className="w-4 h-4 text-red-400" />
+                    }
+                  >
+                    <span className="text-red-900 text-xs">{risk}</span>
+                  </InfoListItem>
+                ))}
+              </ul>
+            </div>
+          </AnalysisSection>
+        )}
 
         {/* Tracker Breakdown */}
-        {aiSummary.summary.trackerBreakdown?.length > 0 && (
-          <div>
-            <h3 className="font-semibold text-sm text-gray-800 mb-2 flex items-center gap-2">
-              <ShieldExclamationIcon className="w-4 h-4 text-yellow-500" />
-              Top Trackers Explained:
-            </h3>
+        {trackerBreakdown.length > 0 && (
+          <AnalysisSection
+            title="Top Trackers Explained"
+            icon={
+              <ShieldExclamationIcon className="w-5 h-5 text-yellow-600" />
+            }
+          >
             <div className="space-y-2">
-              {aiSummary.summary.trackerBreakdown
-                .slice(0, 3)
-                .map((tracker, index) => (
-                  <div
-                    key={index}
-                    className="text-xs bg-yellow-50 p-2 rounded border-l-2 border-yellow-400"
-                  >
-                    {truncateWords(tracker, 60)}
-                  </div>
-                ))}
+              {trackerBreakdown.slice(0, 4).map((tracker, index) => (
+                <ExplainerCard key={index} colorClass="border-yellow-500">
+                  {tracker}
+                </ExplainerCard>
+              ))}
             </div>
-          </div>
+          </AnalysisSection>
         )}
       </div>
     </div>
