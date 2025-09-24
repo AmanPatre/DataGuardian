@@ -32,9 +32,7 @@ const ModernToggle = ({
         await onToggle(newState, settingKey);
       }
 
-      // Show feedback to user
-      const action = newState ? "enabled" : "disabled";
-      console.log(`Privacy setting ${action}: ${label}`);
+      // Show feedback to user via notification only
 
       // Show visual feedback with enhanced notification
       if (typeof chrome !== "undefined" && chrome.notifications) {

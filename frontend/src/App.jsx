@@ -35,10 +35,8 @@ function App() {
   const [showManualInput, setShowManualInput] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
 
-  // Simplified logging - only to console
-  const logInfo = (message) => {
-    console.log(`DataGuardian: ${message}`);
-  };
+  // Logging disabled for production noise reduction
+  const logInfo = () => {};
 
   // Use useCallback to memoize analyzeUrl function
   const analyzeUrl = useCallback((inputUrl, isAutoDetected = false) => {
@@ -48,7 +46,6 @@ function App() {
     setLoading(true);
     setError(null);
     setAnalysisProgress(1);
-
 
     if (!inputUrl || !inputUrl.trim()) {
       logInfo("Empty or invalid input");
@@ -107,8 +104,8 @@ function App() {
 
     // Prepare API request
     const requestData = {
-        url: finalUrl,
-        forceRefresh: !isAutoDetected,
+      url: finalUrl,
+      forceRefresh: !isAutoDetected,
     };
 
     logInfo("Sending request to backend...");
@@ -122,15 +119,16 @@ function App() {
         setAnalysisProgress(2); // Move to AI Analysis step
 
         // [FIXED] The aiSummary is nested inside response.data.site, not at the top level.
-        const trackerDetails = response.data.site.aiSummary?.trackerDetails || [];
+        const trackerDetails =
+          response.data.site.aiSummary?.trackerDetails || [];
         site.trackers = categorizeTrackers(trackerDetails);
-        
+
         setSiteData(site);
 
         // Add a delay to show the "Finalizing" step
         setTimeout(() => {
           setAnalysisProgress(3); // Move to Finalizing step
-          
+
           // Add another small delay before hiding the loader
           setTimeout(() => {
             setLoading(false);

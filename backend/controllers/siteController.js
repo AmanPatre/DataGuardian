@@ -104,7 +104,6 @@ function isDatabaseConnected() {
 const analyzeSite = async (req, res) => {
   try {
     const { url, simplifiedPolicy } = req.body;
-    console.log(`🔍 Starting analysis for: ${url}`);
 
     if (isDatabaseConnected()) {
       const existingSite = await Site.findOne({ url });
@@ -131,7 +130,6 @@ const analyzeSite = async (req, res) => {
         }
 
         if (isCacheValid) {
-          console.log(`✅ Cache hit: Data for ${url} is fresh. Returning stored info.`);
           const response = {
             success: true,
             message: "Site data retrieved from cache",
@@ -150,16 +148,14 @@ const analyzeSite = async (req, res) => {
           };
           return res.status(200).json(response);
         }
-        console.log(`⏱️ Cache stale for ${url}. Re-analyzing.`);
+
       }
     }
 
     // --- If cache is missed or stale, proceed with full analysis ---
-    console.log("📊 Detecting trackers...");
     const trackerResult = await detectTrackers(url);
 
     if (!trackerResult.success) {
-      console.log("❌ Tracker detection failed:", trackerResult.error);
       return res.status(500).json({
         success: false,
         error: "Failed to analyze website trackers",
@@ -168,7 +164,6 @@ const analyzeSite = async (req, res) => {
     }
     const { detectedTrackers } = trackerResult;
 
-    console.log("🤖 Generating AI privacy summary...");
     const aiSummary = await generateAIPrivacySummary(detectedTrackers, url);
 
     const score = calculatePrivacyScore({
@@ -180,7 +175,7 @@ const analyzeSite = async (req, res) => {
     const grade = getGradeFromScore(score);
     const category = getCategory(score);
 
-    console.log(`📈 Privacy Score: ${score} (${grade}) - ${category}`);
+
 
     let site = null;
     let dbError = null;
@@ -201,7 +196,7 @@ const analyzeSite = async (req, res) => {
           new: true,
           upsert: true,
         });
-        console.log("📝 Upserted site record in database");
+
       } catch (dbErr) {
         console.warn("⚠️ Database operation failed:", dbErr.message);
         dbError = dbErr.message;
@@ -240,7 +235,6 @@ const analyzeSite = async (req, res) => {
       },
     };
 
-    console.log("✅ Analysis complete, sending response");
     res.status(201).json(response);
   } catch (error) {
     console.error("❌ Analysis failed:", error);
@@ -277,9 +271,8 @@ function generateUserFriendlySummary(site) {
     if (companies.length > 0) {
       summary += ` Your data may be shared with ${companies
         .slice(0, 3)
-        .join(", ")}${
-        companies.length > 3 ? ` and ${companies.length - 3} others` : ""
-      }.`;
+        .join(", ")}${companies.length > 3 ? ` and ${companies.length - 3} others` : ""
+        }.`;
     }
   }
 
@@ -345,7 +338,7 @@ const getAllSites = async (req, res) => {
       error: error.message,
       sites: [],
     });
-    console.log(error);
+
   }
 };
 

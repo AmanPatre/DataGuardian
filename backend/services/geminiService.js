@@ -24,7 +24,6 @@ export async function generateAIPrivacySummary(trackers, url) {
     const cached = aiCache.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-      console.log('🚀 Using cached AI analysis for:', url);
       return cached.data;
     }
 
