@@ -1,148 +1,28 @@
-## DataGuardian – Privacy Analysis API + Chrome Extension
+## DataGuardian Chrome Extension (Frontend)
 
-DataGuardian helps users understand and control how websites track them. It combines:
+This is the Chrome extension UI for DataGuardian. It shows an easy privacy snapshot for the current site, counts tracker categories, and lets you switch privacy modes: Stealth, Research, or None. You can also block trackers by category for the current site.
 
-- A backend API that visits sites in a headless browser, detects tracker domains, and generates AI-powered privacy summaries.
-- A Chrome extension frontend that presents a clear privacy snapshot, lets users toggle protection modes, and optionally blocks or limits tracking behavior per-site.
-
----
-
-## Key Features
-
-- **Tracker detection (server-side)**: Uses a hardened headless Chromium session to load the target page, observe all network activity, and infer trackers from domain lists, URL/pattern heuristics, and behavior.
-- **AI privacy summaries**: Calls Google Gemini to turn the tracker list into an actionable, user-friendly summary with what’s collected, who data is shared with, retention, and key risks. Caches results to reduce latency and cost.
-- **Privacy score and grade**: Computes a 0–100 score and letter grade based on HTTPS usage, tracker volume, policy hints, and AI risk signals. Groups results into categories like “Excellent”, “Good”, etc.
-- **Network graph API**: Builds a simple graph for the site and its trackers for visualization (nodes and edges with inferred categories and companies).
-- **Chrome extension UI**: Clean popup with AI one‑liners, tracker category counts, and quick privacy mode toggles: Stealth, Research, or None.
-- **Per‑site controls**: Persisted site settings via `chrome.storage`. Optionally blocks trackers and/or specific tracker categories with lightweight in‑page guards.
+The backend API (in `../backend/`) does the heavy lifting (headless visit + tracker detection + AI summary). This extension displays the results and applies your per‑site privacy choices.
 
 ---
 
-## Architecture Overview
+## What You Get
 
-### Backend (Node.js + Express)
-
-- `backend/server.js`
-
-  - Express app with CORS, JSON limits, security headers, request logging, rate limiting, health check, and `/api/sites/*` routes.
-  - Connects to MongoDB (via `backend/config/db.js`).
-
-- `backend/routes/siteRoutes.js`
-
-  - Routes:
-    - `POST /api/sites/analyze` – Analyze a URL for trackers and compute score/summary.
-    - `GET /api/sites/network?url=` – Return nodes/links for the site→tracker graph.
-    - `GET /api/sites/:url` (or `?url=` in controller) – Fetch a site’s last stored result.
-    - `GET /api/sites/` – List stored sites, most recent first.
-
-- `backend/controllers/siteController.js`
-
-  - Calls `detectTrackers(url)` to run a headless session and capture tracker domains.
-  - Calls `generateAIPrivacySummary(trackers, url)` for a structured AI summary.
-  - Computes `score`, `grade`, and `category`; persists into Mongo when available.
-  - Implements smart caching rules: reuse recent successful AI results for 48h (30m for failed AI) to avoid redundant re‑analysis.
-  - Exposes graph data that classifies trackers into categories and companies with fallbacks if AI detail is unavailable.
-
-- `backend/utility/trackerService.js`
-
-  - Puppeteer logic to launch Chromium, set viewport and UA, listen to all requests, and classify trackers using:
-    - Known tracker domain lists (Google, Meta, ad networks, analytics, social, etc.).
-    - Heuristic patterns (e.g., `/analytics`, `/collect`, `pixel`, `telemetry`), and subdomain patterns (e.g., `.ads.`).
-  - Simulates realistic behavior (scroll, cookie-consent acceptance) to trigger lazy trackers.
-
-- `backend/services/geminiService.js`
-
-  - Wraps Google Generative AI to convert a tracker list into a structured summary.
-  - Extracts and validates JSON, with robust fallbacks if AI is unavailable or parsing fails.
-  - Adds popup vs full variants (sentence‑aware truncation), returns per‑tracker details, and caches responses in‑memory for 24h.
-
-- `backend/models/Site.js`
-  - MongoDB schema for analyzed sites: `url`, `trackers`, AI summary, score/grade/category, timestamps, and helper virtuals/methods.
-
-### Frontend (Chrome Extension + React + Vite)
-
-- `frontend/public/manifest.json` (MV3)
-
-  - Declares permissions like `declarativeNetRequest`, `webRequest`, and `<all_urls>` host access for analysis and optional blocking.
-  - Points to `background.js`, `content.js`, and React popup (`index.html`).
-
-- React app (Vite) under `frontend/src/`
-  - `pages/PopupView.jsx` – Popup UI with:
-    - AI Privacy Snapshot: one‑liner “Collects”, “Shares With”, and “Key Risk”.
-    - Tracker category counts (Advertising, Analytics, Social, CDN/Utility, Tag Manager, Unknown).
-    - Quick mode toggles: Stealth (block all trackers), Research (pseudonymize/limit), None.
-  - `utils/privacyManager.js` – Site‑scoped settings stored via `chrome.storage`, helpers to:
-    - Toggle blocking (all or by category) with in‑page guards (wrap fetch/XHR, script creation) for known tracker domains.
-    - Enforce cookie/notification preferences when possible.
-    - Provide pseudonymization utilities for “Research” mode (strip IDs/headers and add a stable per‑site pseudonym header).
+- Simple popup that shows:
+  - AI privacy one‑liners: what is collected, who it’s shared with, and a key risk
+  - Tracker counts by category (Advertising, Analytics, Social, CDN/Utility, Tag Manager, Unknown)
+  - A grade that reflects the site’s privacy score
+- One‑click privacy modes:
+  - Stealth: block known trackers aggressively
+  - Research: reduce tracking identifiers while keeping sites usable
+  - None: turn protections off for the current site
+- Per‑site settings are remembered using `chrome.storage`
 
 ---
 
-## How It Works (End‑to‑End)
+## Quick Start
 
-1. The extension or a client POSTs `url` (and optional `simplifiedPolicy`) to `POST /api/sites/analyze`.
-2. The backend launches a headless browser, visits the URL, observes requests, and flags likely tracker domains.
-3. The backend requests an AI privacy summary from Gemini (or generates a fallback) and computes a score/grade/category.
-4. Results are persisted in MongoDB (if available) and returned to the client, alongside a user‑friendly summary string.
-5. In the extension popup, users see the AI one‑liners and detected tracker categories. Users can toggle site privacy mode:
-   - **Stealth**: block known trackers aggressively.
-   - **Research**: reduce tracking identifiers (pseudonymize, trim cookies/headers) while allowing site function.
-   - **None**: disable protections for that site.
-6. Settings persist per‑site and can trigger in‑page instrumentation to block/limit calls to known tracker domains.
-
----
-
-## API Reference (Core Endpoints)
-
-- `POST /api/sites/analyze`
-
-  - Body: `{ url: string, simplifiedPolicy?: string }`
-  - Returns: `{ success, site: { url, trackers, score, grade, category, aiSummary, summary, lastAnalyzed } }`
-
-- `GET /api/sites/network?url=<encodedUrl>`
-
-  - Returns nodes/links describing the site→tracker network plus summaries.
-
-- `GET /api/sites?url=<encodedUrl>` or `GET /api/sites/:url`
-
-  - Returns last stored analysis for a site.
-
-- `GET /health`
-  - Simple service health status.
-
-Notes:
-
-- The controller includes a 48h cache window for successful AI runs (30m for failed), reducing external calls and ensuring responsiveness.
-
----
-
-## Setup & Installation
-
-### Prerequisites
-
-- Node.js 18+
-- MongoDB (local or hosted)
-- A Google Gemini API key for enhanced summaries (optional, but recommended)
-
-### Backend
-
-1. Create `backend/.env` with at least:
-   - `PORT=5000`
-   - `MONGO_URI=mongodb://localhost:27017/dataguardian`
-   - `GEMINI_API_KEY=your_api_key_here` (optional; without it, fallbacks are used)
-2. Install dependencies and start the API:
-
-```bash
-cd backend
-npm install
-npm run start # or: node server.js
-```
-
-The server logs a health URL like `http://localhost:5000/health`.
-
-### Frontend (Chrome Extension)
-
-1. Install dependencies and build:
+1. Build the extension
 
 ```bash
 cd frontend
@@ -150,62 +30,279 @@ npm install
 npm run build
 ```
 
-2. Load in Chrome:
+2. Load in Chrome
 
-   - Open `chrome://extensions` → Enable Developer mode → Load unpacked → select `frontend/dist`.
-   - Pin “DataGuardian” and click the icon to open the popup.
+- Open `chrome://extensions`
+- Turn on Developer Mode
+- Click “Load unpacked” and select `frontend/dist`
+- Pin “DataGuardian” and click the icon to open the popup
 
-3. Development mode (optional):
-   - `npm run dev` serves the React app; for the extension popup, prefer building and loading `dist` to match MV3 expectations.
+3. (Optional) Run the backend API
+
+The popup can show richer data when the API is running. See the project root `README.md` for backend setup. Typical steps:
+
+```bash
+cd ../backend
+npm install
+npm run start
+```
 
 ---
 
-## Configuration & Environment
+## Using the Popup
 
-- CORS in the backend allows `http://localhost:5173`, `http://localhost:3000`, and `chrome-extension://*` by default.
-- Puppeteer is launched headless with sandbox‑relaxing flags suitable for containerized or CI environments.
-- AI caching is in‑memory; if you run multiple instances, consider an external cache.
+- Open any website, then click the DataGuardian icon.
+- Read the AI Privacy Snapshot (3 short lines): Collects, Shares With, Key Risk.
+- Review tracker category counts (e.g., Advertising: 6, Analytics: 3).
+- Choose a mode:
+  - Stealth: blocks known trackers; may break some site features.
+  - Research: limits identifiers (pseudonymize/trim cookies/headers) to reduce tracking while keeping sites usable.
+  - None: disables protections for this site.
+- You can also toggle per‑category blocking (Ad, Analytics, Social) when available.
+
+Changes are saved per site and take effect immediately (reloading the tab may be needed on some pages).
 
 ---
 
-## Security & Privacy Notes
+## Screenshots (placeholders)
 
-- Tracker blocking and pseudonymization are best‑effort. Websites change frequently and may use new domains or obfuscation techniques.
-- “Research” mode aims to reduce linkability by stripping IDs/cookies and adding a stable per‑site pseudonym header for measurement. It is not an anonymity guarantee.
-- Headless analysis loads third‑party content; run the backend in a constrained environment. Review Puppeteer flags and network egress policies as needed.
-- Respect site terms of service and robots directives. Use reasonable rate limits; the code includes basic waiting and delay strategies.
+Add your own images in each section.
+
+### Extension Icon and Popup Entry
+
+<!-- Add image: toolbar with pinned extension icon -->
+
+### Popup – Privacy Snapshot
+
+<!-- Add image: top section showing Collects / Shares With / Key Risk -->
+
+### Popup – Tracker Categories
+
+<!-- Add image: list of categories with counts and icons -->
+
+### Popup – Mode Toggles
+
+<!-- Add image: Stealth / Research / None buttons and description -->
+
+### Full Report Navigation
+
+<!-- Add image: button “View Full Report & Controls” -->
+
+---
+
+## Permissions (Why They’re Needed)
+
+- `tabs`, `activeTab`: to read the current tab’s URL and update UI/actions per site
+- `storage`: to remember your site‑specific settings
+- `scripting`: to inject lightweight blocking/instrumentation (e.g., wrap fetch/XHR, script src guards)
+- `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`: for rule‑based network filtering (where used)
+- `webRequest`, `webRequestBlocking`: for additional request‑level controls on some pages
+- `contentSettings`, `notifications`, `webNavigation`, `cookies`: to apply your choices for cookies/notifications and respond to navigation changes
+- `host_permissions: <all_urls>`: to work on any site you visit
+
+Note: Some Chrome pages (e.g., Chrome Web Store) restrict extension behavior by design.
+
+---
+
+## How It Works (Frontend)
+
+- The popup UI is built with React + Vite.
+- `src/pages/PopupView.jsx` renders:
+  - AI one‑liners from the backend summary (if available)
+  - Tracker category counts (derived from analysis)
+  - Mode buttons and per‑category toggles
+- `src/utils/privacyManager.js` handles:
+  - Persisting settings by site (`chrome.storage.local`)
+  - Applying settings (e.g., script guards; wrapping `fetch`/XHR) when enabled
+  - “Research” mode helpers (strip IDs/cookies, add a stable per‑site pseudonym header)
+
+---
+
+## Backend Integration (API)
+
+The extension expects the backend API to provide analysis results. Core endpoints:
+
+- `POST /api/sites/analyze`
+
+  - Body: `{ url: string, simplifiedPolicy?: string }`
+  - Returns: `{ success, site: { url, trackers, score, grade, category, aiSummary } }`
+
+- `GET /api/sites/network?url=<encodedUrl>`
+  - Returns nodes/links describing the site→tracker network
+
+If the backend is not running, the UI still works but shows limited information (no fresh AI summary).
+
+---
+
+## How It Works (End‑to‑End, Simple)
+
+1. You open a website and click the DataGuardian icon.
+2. The extension (or a client) sends the page URL to the backend: `POST /api/sites/analyze`.
+3. The backend uses a headless browser to visit the page, watches network requests, and flags tracker domains.
+4. The backend asks Google Gemini for an easy privacy summary (or uses a safe fallback when AI is unavailable).
+5. The backend computes a score and grade, saves the result (if MongoDB is connected), and returns everything.
+6. The popup shows the AI one‑liners, tracker counts by category, and your privacy mode options.
+
+Notes:
+
+- Successful AI results are cached for 48 hours; failed AI attempts are cached for 30 minutes to avoid retry storms.
+- MongoDB is optional: if not connected, you still get live results, but they won’t be stored.
+
+---
+
+## Backend: Quick Overview
+
+- Tech: Node.js, Express, Puppeteer, Mongoose, Google Generative AI (Gemini)
+- Env vars (in `backend/.env`):
+  - `PORT=5000`
+  - `MONGO_URI=mongodb://localhost:27017/dataguardian` (optional but recommended)
+  - `GEMINI_API_KEY=...` (optional; without it, the backend returns a sensible fallback summary)
+- Security & performance:
+  - Helmet security headers, request logging
+  - Rate limit on `/api/` (100 req / 15 min / IP)
+  - JSON body limit 10 MB
+  - In‑memory AI response cache (24h)
+
+### Main Endpoints (with examples)
+
+- Analyze a site
+
+```bash
+curl -X POST http://localhost:5000/api/sites/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+Response (shape):
+
+```json
+{
+  "success": true,
+  "site": {
+    "url": "https://example.com",
+    "score": 72,
+    "grade": "B-",
+    "category": "Good",
+    "trackers": ["doubleclick.net", "googletagmanager.com"],
+    "trackerCount": 2,
+    "simplifiedPolicy": null,
+    "aiSummary": {
+      "success": true,
+      "summary": {
+        "whatTheyCollect": ["Browsing behavior", "Device info"],
+        "whoTheyShareWith": ["Google"],
+        "howLongTheyKeep": "Varies by service",
+        "keyRisks": ["Behavioral profiling for advertising"],
+        "trackerBreakdown": ["doubleclick.net: Google's advertising network"]
+      },
+      "trackerCount": 2,
+      "trackerDetails": [
+        {
+          "domain": "doubleclick.net",
+          "name": "Google Ads",
+          "category": "Advertising",
+          "company": "Google"
+        }
+      ]
+    },
+    "lastAnalyzed": "2025-01-01T00:00:00.000Z",
+    "summary": "This site has good privacy practices but uses some tracking (2 trackers). Your data may be shared with Google."
+  }
+}
+```
+
+- Network graph for a site
+
+```bash
+curl "http://localhost:5000/api/sites/network?url=https%3A%2F%2Fexample.com"
+```
+
+Response (shape):
+
+```json
+{
+  "success": true,
+  "nodes": [
+    {
+      "id": "https://example.com",
+      "type": "site",
+      "label": "example.com",
+      "score": 72,
+      "category": "Good"
+    },
+    {
+      "id": "doubleclick.net",
+      "type": "tracker",
+      "label": "Google Ads",
+      "category": "Advertising",
+      "company": "Google"
+    }
+  ],
+  "links": [
+    {
+      "source": "https://example.com",
+      "target": "doubleclick.net",
+      "type": "Advertising"
+    }
+  ],
+  "aiSummary": {},
+  "userSummary": "..."
+}
+```
+
+---
+
+## Scoring & Grades (Simple Rules)
+
+- Trackers matter most (up to 40 points): fewer trackers → higher score.
+- HTTPS adds up to 10 points.
+- Policy hints (keywords) add or subtract up to 30 points.
+- AI risk signals adjust up to ±20 points (e.g., fewer risks → bonus; high‑risk partners → penalties).
+- Final score is 0–100, then mapped to grade (A+ → F) and category (Excellent → Very Poor).
+
+Categories used for trackers include: Advertising, Analytics, Social, Tag Manager, CDN/Utility, and Unknown.
+
+---
+
+## Headless Analysis Notes (Puppeteer)
+
+- Launches Chromium headless with safe defaults for CI/containers.
+- Observes all requests and flags trackers by known lists and common URL patterns (e.g., `/analytics`, `pixel`, `telemetry`).
+- Simulates small interactions (scroll, attempt cookie‑consent) to reveal lazy‑loaded trackers.
+
+Tip: For deeper coverage, extend domain lists or increase waiting/interaction time in `backend/utility/trackerService.js`.
+
+## Development
+
+Dev server for React (optional – for UI iteration):
+
+```bash
+npm run dev
+```
+
+For the actual extension popup, build and load `dist` in Chrome (MV3).
 
 ---
 
 ## Troubleshooting
 
-- Backend fails to start: verify `MONGO_URI` and that MongoDB is reachable; without Mongo, the API still returns live analysis results but cannot persist.
-- AI summary missing: ensure `GEMINI_API_KEY` is set; otherwise, you’ll see a fallback, cached response.
-- No trackers detected: some trackers are event‑driven; try increasing interaction time or toggling `waitForInteractions` in `detectTrackers` options.
-- Extension controls not applying: re‑load the active tab after mode changes; MV3 restrictions can limit some APIs on certain pages (e.g., Chrome Web Store).
+- No data/blank UI: ensure the popup is opened on a normal website (not system pages).
+- Mode changes don’t apply: try reloading the active tab.
+- AI summary missing: the backend may be down or lacks `GEMINI_API_KEY`.
+- Tracker counts look low: trackers can be event‑driven; interact with the page (scroll, click) and re‑analyze on the backend.
 
 ---
 
-## Project Structure
+## Folder Pointers
 
-```
-backend/
-  config/            # DB and env validation
-  controllers/       # Express controllers (analysis, lookup, graph)
-  models/            # Mongoose schemas
-  routes/            # API routes
-  services/          # Gemini AI, in‑memory cache
-  utility/           # Puppeteer tracker detection
-  server.js          # Express app bootstrap
-
-frontend/
-  public/            # MV3 manifest, background/content scripts, assets
-  src/               # React app for the extension popup
-  dist/              # Build output to load as unpacked extension
-```
+- `public/manifest.json` – Chrome MV3 permissions and entry points
+- `public/background.js` – background service worker
+- `public/content.js` – content script injected into pages
+- `src/pages/PopupView.jsx` – main popup UI
+- `src/utils/privacyManager.js` – per‑site settings and blocking helpers
 
 ---
 
 ## License
 
-This project is provided as‑is for research and educational purposes. Review and adapt for your compliance and jurisdictional requirements before production use.
+For research and educational use. Review for your compliance requirements before production.
