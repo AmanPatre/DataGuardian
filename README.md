@@ -40,6 +40,13 @@ Here's what you see and can do:
   - ⚪ **None:** This is the default mode. All protections are off, and trackers are allowed to function as they normally would.
 
 Your choice of mode is saved for that specific site, so you can set your preferences once and DataGuardian will remember them on your next visit.
+<img width="1375" height="935" alt="image" src="https://github.com/user-attachments/assets/c8cc973e-e2c3-41dc-a7f4-8be70c614a7d" />
+<img width="1372" height="951" alt="image" src="https://github.com/user-attachments/assets/de58a651-4b37-4dce-aa89-29eb5b004b01" />
+
+<img width="636" height="155" alt="image" src="https://github.com/user-attachments/assets/d041ec87-edf6-4cfa-9dcf-c1877e200b7d" />
+
+
+
 
 ### 2. The Deep Dive: The Full Report View
 
@@ -56,6 +63,11 @@ At the top, you'll find the complete AI-driven summary of the website's privacy 
 - **Key Privacy Risks:** The most significant potential risks to your privacy, explained in simple terms.
 
 This feature does the hard work for you, transforming a 10,000-word legal document into a few key takeaways.
+<img width="1134" height="963" alt="image" src="https://github.com/user-attachments/assets/4feaac15-934f-4dc7-879d-044169f17738" />
+<img width="575" height="451" alt="image" src="https://github.com/user-attachments/assets/72728354-68b7-4ae0-ae4d-12aef0145eb8" />
+<img width="556" height="540" alt="image" src="https://github.com/user-attachments/assets/c2e04830-bc78-49f2-9788-d4a5bc0630eb" />
+<img width="546" height="730" alt="image" src="https://github.com/user-attachments/assets/9ad16c65-fff7-4430-bbcf-73192f00aa96" />
+<img width="536" height="727" alt="image" src="https://github.com/user-attachments/assets/ee1b703c-a6db-40ca-a844-7d9ef00e17a4" />
 
 #### b. Granular Privacy Controls
 
@@ -63,6 +75,9 @@ Below the AI analysis is the Privacy Controls panel. This is where you can move 
 
 - **Per-Category Toggles:** You'll see a list of all tracker categories detected (Advertising, Social, Analytics, etc.), each with its own on/off toggle.
 - **Customized Protection:** Don't want to be tracked by social media widgets but are okay with the site's analytics? Simply flip the switch for the "Social" category to OFF. Your custom ruleset is automatically saved for this site.
+<img width="560" height="792" alt="image" src="https://github.com/user-attachments/assets/04ee3e36-3b31-4431-8c45-8c7e7a59db07" />
+
+
 
 #### c. Interactive Data Flow Visualization
 
@@ -72,6 +87,15 @@ Finally, this view features a powerful visualization of the tracker network.
 - **Explore the Network:** You can click and drag the nodes to see the connections more clearly, providing a stark visual representation of the often-hidden data-sharing ecosystem you've entered just by visiting a single webpage.
 
 This walkthrough from the simple popup to the detailed report allows you to engage with your privacy at the level you're comfortable with, whether it's a one-click fix or a fine-tuned set of custom rules.
+<img width="557" height="643" alt="image" src="https://github.com/user-attachments/assets/7db0247c-0ee1-4ffb-b22b-f3c15801ac45" />
+
+<img width="725" height="866" alt="image" src="https://github.com/user-attachments/assets/e5fd0faa-a3f2-4559-917b-783d2c105129" />
+<img width="618" height="868" alt="image" src="https://github.com/user-attachments/assets/0036d0e6-1fec-405c-97ef-6946a9a07d88" />
+ <img width="595" height="479" alt="image" src="https://github.com/user-attachments/assets/1ee64614-ba50-4504-b2f8-20a568ca0563" />
+
+
+
+
 
 ## 🛠️ Architectural Overview
 
