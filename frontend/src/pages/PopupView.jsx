@@ -110,7 +110,7 @@ const CompactAIPrivacyAnalysis = ({ summary }) => {
 const PopupView = ({ siteData = {}, onNavigate }) => {
   const [privacyManager] = useState(new PrivacyManager());
   const [isLoading, setIsLoading] = useState(true);
-  const [privacyMode, setPrivacyMode] = useState("research");
+  const [privacyMode, setPrivacyMode] = useState("none");
 
   const {
     url = "Unknown site",
@@ -129,11 +129,27 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
     const loadMode = async () => {
       setIsLoading(true);
       try {
+        // We still need to call loadSettings for the privacyManager to know the current URL
+        // for when the user clicks a button.
         await privacyManager.loadSettings(url);
-        const mode = await privacyManager.getPrivacyMode();
-        setPrivacyMode(mode);
+
+        if (chrome && chrome.storage && url && url !== "Unknown site") {
+            const key = `site_settings_${url}`;
+            const result = await new Promise((resolve) => {
+                chrome.storage.local.get(key, (r) => resolve(r));
+            });
+
+            if (result[key] && result[key].privacyMode) {
+                setPrivacyMode(result[key].privacyMode);
+            } else {
+                setPrivacyMode('none');
+            }
+        } else {
+            setPrivacyMode('none');
+        }
       } catch (error) {
         console.error("Failed to load privacy mode:", error);
+        setPrivacyMode("none");
       } finally {
         setIsLoading(false);
       }
@@ -167,6 +183,19 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
       return new URL(urlString).hostname;
     } catch {
       return "this site";
+    }
+  };
+  
+  const getModeDescription = () => {
+    switch (privacyMode) {
+      case "stealth":
+        return "Stealth: Block ALL trackers.";
+      case "research":
+        return "Research: Share data anonymously (no IDs/cookies)";
+      case "none":
+        return "None: Protections are off. Trackers are allowed.";
+      default:
+        return "Select a privacy mode.";
     }
   };
 
@@ -253,12 +282,10 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
             <div>
               <p className="text-sm font-semibold text-gray-800">Mode</p>
               <p className="text-xs text-gray-500">
-                {privacyMode === "stealth"
-                  ? "Stealth: Block ALL trackers."
-                  : "Research: Share data anonymously (no IDs/cookies)"}
+                {getModeDescription()}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
                 onClick={async () => {
                   await privacyManager.setPrivacyMode("stealth");
@@ -272,7 +299,7 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
                     );
                   }
                 }}
-                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
+                className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
                   privacyMode === "stealth"
                     ? "bg-red-600 text-white border-red-600"
                     : "bg-white text-gray-700 border-gray-300"
@@ -293,13 +320,34 @@ const PopupView = ({ siteData = {}, onNavigate }) => {
                     );
                   }
                 }}
-                className={`w-28 text-center px-3 py-1.5 text-sm rounded-lg border ${
+                className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
                   privacyMode === "research"
                     ? "bg-indigo-600 text-white border-indigo-600"
                     : "bg-white text-gray-700 border-gray-300"
                 }`}
               >
                 Research
+              </button>
+              <button
+                onClick={async () => {
+                  await privacyManager.setPrivacyMode("none");
+                  setPrivacyMode("none");
+                  await setAllCategoryBlocking(false);
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("privacyModeChanged", {
+                        detail: { mode: "none" },
+                      })
+                    );
+                  }
+                }}
+                className={`flex-1 text-center px-3 py-1.5 text-sm rounded-lg border ${
+                  privacyMode === "none"
+                    ? "bg-gray-600 text-white border-gray-600"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+              >
+                None
               </button>
             </div>
           </div>
