@@ -1,5 +1,6 @@
 import Site from "../models/Site.js";
 import { detectTrackers } from "../utility/trackerService.js";
+import { classifyDomain } from "../utility/trackerRules.js";
 import { generateAIPrivacySummary } from "../services/geminiService.js";
 import mongoose from "mongoose";
 
@@ -113,18 +114,18 @@ const analyzeSite = async (req, res) => {
 
         // Define cache durations
         const successfulCacheDuration = 48 * 60 * 60 * 1000; // 48 hours
-        const failedCacheDuration = 30 * 60 * 1000;      // 30 minutes
+        const failedCacheDuration = 30 * 60 * 1000; // 30 minutes
 
         let isCacheValid = false;
 
         // Check if the AI summary was successful and use the appropriate cache duration
         if (existingSite.aiSummary && existingSite.aiSummary.success) {
-          if ((now - lastAnalyzed) < successfulCacheDuration) {
+          if (now - lastAnalyzed < successfulCacheDuration) {
             isCacheValid = true;
           }
         } else {
           // For failed or non-existent AI summaries, use the shorter cache
-          if ((now - lastAnalyzed) < failedCacheDuration) {
+          if (now - lastAnalyzed < failedCacheDuration) {
             isCacheValid = true;
           }
         }
@@ -148,7 +149,6 @@ const analyzeSite = async (req, res) => {
           };
           return res.status(200).json(response);
         }
-
       }
     }
 
@@ -175,46 +175,37 @@ const analyzeSite = async (req, res) => {
     const grade = getGradeFromScore(score);
     const category = getCategory(score);
 
-
-
     let site = null;
     let dbError = null;
 
+    // BUG 6 FIX: siteData declared OUTSIDE the try block so the catch block
+    // can access it without a ReferenceError when MongoDB fails.
+    const siteData = {
+      url,
+      simplifiedPolicy,
+      score,
+      grade,
+      category,
+      trackers: detectedTrackers,
+      aiSummary,
+      lastAnalyzed: new Date(),
+    };
+
     if (isDatabaseConnected()) {
       try {
-        const siteData = {
-          url,
-          simplifiedPolicy,
-          score,
-          grade,
-          category,
-          trackers: detectedTrackers,
-          aiSummary,
-          lastAnalyzed: new Date(),
-        };
         site = await Site.findOneAndUpdate({ url }, siteData, {
           new: true,
           upsert: true,
         });
-
       } catch (dbErr) {
         console.warn("⚠️ Database operation failed:", dbErr.message);
         dbError = dbErr.message;
-        site = { ...siteData }; // Use the generated data for the response
+        site = { ...siteData }; // Now safely accessible — Bug 6 is fixed
       }
     } else {
       console.warn("⚠️ Database not connected - creating temporary response");
       dbError = "Database not connected";
-      site = {
-        url,
-        simplifiedPolicy,
-        score,
-        grade,
-        category,
-        trackers: detectedTrackers,
-        aiSummary,
-        lastAnalyzed: new Date(),
-      };
+      site = { ...siteData };
     }
 
     const response = {
@@ -338,7 +329,6 @@ const getAllSites = async (req, res) => {
       error: error.message,
       sites: [],
     });
-
   }
 };
 
@@ -371,174 +361,7 @@ const getNetworkGraph = async (req, res) => {
         category: site.category,
       },
     ];
-    // Helper: get root domain (simple eTLD+1 heuristic)
-    function getRootDomain(hostname) {
-      const parts = String(hostname || "")
-        .toLowerCase()
-        .split(".")
-        .filter(Boolean);
-      if (parts.length <= 2) return parts.join(".");
-      return parts.slice(-2).join(".");
-    }
-
-    const siteRoot = getRootDomain(new URL(site.url).hostname);
-
-    // Helper: classify tracker domain when AI details are not available
-    function classifyTrackerDomain(domain) {
-      const lower = String(domain || "").toLowerCase();
-
-      // First-party subdomains → mark as first-party analytics/utility
-      if (lower.endsWith(siteRoot)) {
-        return {
-          name: domain,
-          category: "First-Party/Analytics",
-          company: "First-Party",
-        };
-      }
-
-      const checks = [
-        {
-          test: /doubleclick|googlesyndication|googleadservices|ads\.google|adservice\.google/,
-          name: "Google Ads",
-          category: "Advertising",
-          company: "Google",
-        },
-        {
-          test: /googletagmanager|gtm/,
-          name: "Google Tag Manager",
-          category: "Tag Manager",
-          company: "Google",
-        },
-        {
-          test: /google-analytics|analytics\.google/,
-          name: "Google Analytics",
-          category: "Analytics",
-          company: "Google",
-        },
-        {
-          test: /gstatic|googleapis/,
-          name: "Google Static/Services",
-          category: "CDN/Utility",
-          company: "Google",
-        },
-        {
-          test: /\.google\./,
-          name: "Google Services",
-          category: "CDN/Utility",
-          company: "Google",
-        },
-
-        {
-          test: /facebook|fbcdn|fbevents|connect\.facebook\.net/,
-          name: "Meta Pixel",
-          category: "Advertising",
-          company: "Meta",
-        },
-        {
-          test: /instagram\.com/,
-          name: "Instagram",
-          category: "Social",
-          company: "Meta",
-        },
-
-        {
-          test: /linkedin|licdn|bat\.bing\.com|bingads/,
-          name: "Microsoft Ads/LinkedIn",
-          category: "Advertising",
-          company: "Microsoft",
-        },
-
-        {
-          test: /twitter|tiktok|snapchat|pinterest/,
-          name: "Social Network",
-          category: "Social",
-          company: "Various",
-        },
-
-        {
-          test: /adnxs|appnexus|rubiconproject|pubmatic|criteo|taboola|outbrain|openx|adroll/,
-          name: "Ad Network",
-          category: "Advertising",
-          company: "Various",
-        },
-
-        {
-          test: /mixpanel|segment|amplitude|hotjar|fullstory|logrocket|optimizely|mouseflow|chartbeat|clicktale|mathtag|doubleverify/,
-          name: "Analytics/Optimization",
-          category: "Analytics",
-          company: "Various",
-        },
-
-        {
-          test: /scorecardresearch|quantserve|comscore|demdex|adsrvr|eyeota|bluekai/,
-          name: "Data Broker",
-          category: "Advertising",
-          company: "Various",
-        },
-
-        // Additional common trackers
-        {
-          test: /amazon-adsystem\.com/,
-          name: "Amazon Advertising",
-          category: "Advertising",
-          company: "Amazon",
-        },
-        {
-          test: /bouncex\.net|wunderkind\.co/,
-          name: "Wunderkind (BounceX)",
-          category: "Advertising",
-          company: "Wunderkind",
-        },
-        {
-          test: /onetag\.com|s-onetag\.com/,
-          name: "OneTag",
-          category: "Advertising",
-          company: "OneTag",
-        },
-        {
-          test: /turner\.com/,
-          name: "Turner CDN",
-          category: "CDN/Utility",
-          company: "Warner Bros. Discovery (Turner)",
-        },
-        {
-          test: /collector\.github\.com/,
-          name: "GitHub Telemetry",
-          category: "Analytics",
-          company: "GitHub",
-        },
-        {
-          test: /cloudflareinsights\.com/,
-          name: "Cloudflare Web Analytics",
-          category: "Analytics",
-          company: "Cloudflare",
-        },
-        {
-          test: /dubcdn\.com/,
-          name: "Dub CDN",
-          category: "CDN/Utility",
-          company: "Dub",
-        },
-      ];
-
-      for (const rule of checks) {
-        if (rule.test.test(lower)) {
-          return {
-            name: rule.name,
-            category: rule.category,
-            company: rule.company,
-          };
-        }
-      }
-
-      if (
-        /analytics|track|collect|pixel|beacon|telemetry|metrics/i.test(lower)
-      ) {
-        return { name: "Tracker", category: "Analytics", company: "Unknown" };
-      }
-
-      return { name: domain, category: "Unknown", company: "Unknown" };
-    }
+    // trackerInfo is now handled inside the loop using classifyDomain
 
     // Create tracker nodes and links from site to each tracker
     const links = [];
@@ -564,7 +387,7 @@ const getNetworkGraph = async (req, res) => {
         trackerInfo.category === "Unknown" ||
         !trackerInfo.company
       ) {
-        const fallback = classifyTrackerDomain(tracker);
+        const fallback = classifyDomain(tracker);
         trackerInfo = {
           name:
             trackerInfo.name && trackerInfo.name !== tracker

@@ -6,10 +6,8 @@ const connectDB = async () => {
     mongoose.set("strictQuery", false);
 
     const conn = await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // 10 seconds
-      socketTimeoutMS: 45000, // 45 seconds
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
     });
 
     console.log(`MongoDB Connected: ${conn.connection.host}`);
@@ -34,18 +32,6 @@ const connectDB = async () => {
       console.error(
         "Continuing without database connection in development mode..."
       );
-    }
-  }
-};
-
-const connectWithRetry = async (retries = 5) => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB Connected");
-  } catch (err) {
-    if (retries > 0) {
-      console.log(`Retrying database connection... (${retries} attempts left)`);
-      setTimeout(() => connectWithRetry(retries - 1), 5000);
     }
   }
 };

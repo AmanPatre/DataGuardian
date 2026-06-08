@@ -1,86 +1,5 @@
 import puppeteer from "puppeteer";
-
-// Comprehensive list of tracker domains with pattern matching
-const TRACKER_DOMAINS = [
-  // Analytics & Tag Management
-  "google-analytics.com",
-  "googletagmanager.com",
-  "googleadservices.com",
-  "google-analytics.com",
-
-  // Social Media Trackers
-  "facebook.net",
-  "connect.facebook.net",
-  "facebook.com",
-  "twitter.com",
-  "ads-twitter.com",
-  "linkedin.com",
-  "snapchat.com",
-  "pinterest.com",
-  "tiktok.com",
-
-  // Ad Networks
-  "doubleclick.net",
-  "googlesyndication.com",
-  "adservice.google.com",
-  "ads.google.com",
-  "adnxs.com",
-  "amazon-adsystem.com",
-  "criteo.com",
-  "outbrain.com",
-  "taboola.com",
-  "adroll.com",
-  "rubiconproject.com",
-  "pubmatic.com",
-  "openx.net",
-  "adsystem.com",
-
-  // Analytics Platforms
-  "segment.com",
-  "mixpanel.com",
-  "amplitude.com",
-  "hotjar.com",
-  "fullstory.com",
-  "logrocket.com",
-  "optimizely.com",
-  "mouseflow.com",
-
-  // Data Brokers & Audience
-  "scorecardresearch.com",
-  "quantserve.com",
-  "comscore.com",
-  "demdex.net",
-  "adsrvr.org",
-  "turn.com",
-  "eyeota.net",
-  "bluekai.com",
-
-  // Other Common Trackers
-  "chartbeat.com",
-  "clicktale.net",
-  "doubleverify.com",
-  "mathtag.com",
-  "sharethis.com",
-  "addthis.com",
-  "trustarc.com",
-  "adform.net",
-  "bing.com",
-  "yahoo.com"
-];
-
-// Pattern-based detection for dynamic tracker domains
-const TRACKER_PATTERNS = [
-  /\.ads\./,
-  /\.analytics\./,
-  /\.tracking\./,
-  /\.metrics\./,
-  /\.telemetry\./,
-  /ads\d+\./,
-  /track\d*\./,
-  /collect\./,
-  /pixel\./,
-  /beacon\./
-];
+import { isTracker as isTrackerShared } from "./trackerRules.js";
 
 /**
  * Cross-platform delay function
@@ -236,36 +155,7 @@ function isTracker(url, domain, mainDomain, includeFirstParty) {
     return false;
   }
 
-  // Check against known tracker domains
-  const isKnownTracker = TRACKER_DOMAINS.some(tracker =>
-    domain.includes(tracker.toLowerCase())
-  );
-
-  if (isKnownTracker) return true;
-
-  // Check against tracker patterns
-  const matchesPattern = TRACKER_PATTERNS.some(pattern =>
-    pattern.test(domain)
-  );
-
-  if (matchesPattern) return true;
-
-  // Check for common tracker URL patterns
-  const trackerUrlPatterns = [
-    /\/analytics/i,
-    /\/tracking/i,
-    /\/collect/i,
-    /\/beacon/i,
-    /\/pixel/i,
-    /\/track/i,
-    /\/metric/i,
-    /\/telemetry/i,
-    /gtag|gtm/i,
-    /fbevents/i,
-    /doubleclick/i
-  ];
-
-  return trackerUrlPatterns.some(pattern => pattern.test(url));
+  return isTrackerShared(url, domain);
 }
 
 /**

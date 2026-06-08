@@ -1,5 +1,6 @@
 // Background service worker for DataGuardian extension
 // This handles privacy blocking, storage, and communication between components
+importScripts('trackerRules.js');
 
 class DataGuardianBackground {
   constructor() {
@@ -149,9 +150,13 @@ class DataGuardianBackground {
   async loadPrivacyMode() {
     try {
       const r = await chrome.storage.local.get(['privacyMode']);
-      this.privacyMode = r?.privacyMode === 'stealth' ? 'stealth' : 'research';
+      // BUG 10 FIX: 'none' is a valid third mode — don't collapse it to 'research'
+      const mode = r?.privacyMode;
+      this.privacyMode = (mode === 'stealth' || mode === 'research' || mode === 'none')
+        ? mode
+        : 'none';
     } catch (_) {
-      this.privacyMode = 'research';
+      this.privacyMode = 'none';
     }
   }
 
@@ -353,16 +358,25 @@ class DataGuardianBackground {
     }
   }
 
-  // [UPDATE] Single source of truth for all tracker domains.
+  // Use centralized rules for DNR pattern generation
   getTrackerDomains() {
-    return {
-      "Advertising": ['*://*.doubleclick.net/*', '*://*.googlesyndication.com/*', '*://*.googleadservices.com/*', '*://*.amazon-adsystem.com/*', '*://*.criteo.com/*', '*://*.adnxs.com/*'],
-      "Analytics": ['*://*.google-analytics.com/*', '*://*.mixpanel.com/*', '*://*.segment.com/*', '*://*.amplitude.com/*', '*://*.hotjar.com/*'],
-      "Social": ['*://*.facebook.net/*', '*://*.connect.facebook.net/*', '*://*.ads-twitter.com/*', '*://*.linkedin.com/analytics/*'],
-      "Tag Manager": ['*://*.googletagmanager.com/*'],
-      "CDN/Utility": ['*://*.gstatic.com/*', '*://*.googleapis.com/*'],
-      "Unknown": [],
-    };
+    const categories = window.DG_TRACKER_CATEGORIES;
+    const trackerDomains = {};
+
+    Object.values(categories).forEach(category => {
+      if (category === categories.UNKNOWN) {
+        trackerDomains[category] = [];
+        return;
+      }
+
+      const rawDomains = window.dgGetDomainsForCategory(category);
+      // Map to DNR urlFilter patterns: *://*.DOMAIN/*
+      trackerDomains[category] = rawDomains.map(d =>
+        d.includes('*') ? d : `*://*.${d}/*`
+      );
+    });
+
+    return trackerDomains;
   }
 
   async setupRequestBlocking() {

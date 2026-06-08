@@ -3,13 +3,11 @@
   "name": "DataGuardian",
   "version": "1.0",
   "description": "Your Digital Privacy Guardian - Know, Control, and Protect Every Byte of Your Data",
-
   "icons": {
     "16": "extensionHome.png",
     "48": "extensionHome.png",
     "128": "extensionHome.png"
   },
-
   "permissions": [
     "tabs",
     "activeTab",
@@ -21,21 +19,24 @@
     "notifications",
     "cookies"
   ],
-
-  "host_permissions": ["<all_urls>"],
-
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
-
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "trackerRules.js",
+        "content.js"
+      ],
       "run_at": "document_start"
     }
   ],
-
   "action": {
     "default_icon": {
       "16": "extensionHome.png",
@@ -45,18 +46,21 @@
     "default_popup": "index.html",
     "default_title": "DataGuardian Privacy Controls"
   },
-
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
-
   "web_accessible_resources": [
     {
-      "resources": ["*.js", "*.css", "*.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "*.js",
+        "*.css",
+        "*.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
-
   "declarative_net_request": {
     "rule_resources": [
       {

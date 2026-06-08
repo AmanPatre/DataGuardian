@@ -79,9 +79,8 @@ const CollapsibleSection = ({ title, icon, children, defaultOpen = true }) => {
           {title}
         </h2>
         <ChevronDownIcon
-          className={`w-5 h-5 text-gray-400 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
+          className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""
+            }`}
         />
       </button>
       {isOpen && (
@@ -112,6 +111,8 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     {}
   );
 
+  const trackerKeysToken = useMemo(() => Object.keys(trackers).join(","), [trackers]);
+
   // Load settings for all detected tracker categories
   useEffect(() => {
     const loadTrackerSettings = async () => {
@@ -135,7 +136,8 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     };
     if (trackerCategories.length > 0) loadTrackerSettings();
     else setIsLoading(false);
-  }, [privacyManager, url, Object.keys(trackers).join(",")]);
+  }, [privacyManager, url, trackerKeysToken, trackerCategories]);
+
 
   // [NEW] Recalculate score whenever settings change
   useEffect(() => {
@@ -194,7 +196,7 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     window.addEventListener("privacyModeChanged", handler);
     return () => window.removeEventListener("privacyModeChanged", handler);
   }, [url, trackerCategories.join(",")]);
-  
+
   // Create a filtered list of trackers for the visualization
   const visibleTrackers = (aiSummary?.trackerDetails || []).filter(tracker => {
     const category = tracker.category || 'Unknown';
@@ -305,53 +307,53 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
         </CollapsibleSection>
 
         <CollapsibleSection
-  title="Detailed Tracker List"
-  icon={<ListBulletIcon className="w-6 h-6 text-blue-600" />}
-  defaultOpen={false}
->
-  <div className="pt-4 space-y-6">
-    {Object.keys(groupedTrackers).length > 0 ? (
-      Object.keys(groupedTrackers).map((category) => {
-        const details =
-          categoryDetails[category] || categoryDetails.Unknown;
-        return (
-          <div key={category}>
-            <div className="flex items-center gap-3 mb-3">
-              <span className="p-2 bg-gray-100 rounded-lg">
-                {getIcon(details.icon)}
-              </span>
-              <h3 className="font-semibold text-gray-800 text-md">
-                {category} ({groupedTrackers[category].length})
-              </h3>
-            </div>
-            <ul className="space-y-2 pl-4 border-l-2 border-gray-200 ml-4">
-              {groupedTrackers[category].map((tracker) => (
-                <li
-                  key={tracker.domain}
-                  className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg flex justify-between items-center"
-                >
-                  <div>
-                    <span className="font-mono">{tracker.domain}</span>
-                    <span className="block text-gray-500 text-xs mt-1">
-                      Identified as: {tracker.name}
-                    </span>
+          title="Detailed Tracker List"
+          icon={<ListBulletIcon className="w-6 h-6 text-blue-600" />}
+          defaultOpen={false}
+        >
+          <div className="pt-4 space-y-6">
+            {Object.keys(groupedTrackers).length > 0 ? (
+              Object.keys(groupedTrackers).map((category) => {
+                const details =
+                  categoryDetails[category] || categoryDetails.Unknown;
+                return (
+                  <div key={category}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="p-2 bg-gray-100 rounded-lg">
+                        {getIcon(details.icon)}
+                      </span>
+                      <h3 className="font-semibold text-gray-800 text-md">
+                        {category} ({groupedTrackers[category].length})
+                      </h3>
+                    </div>
+                    <ul className="space-y-2 pl-4 border-l-2 border-gray-200 ml-4">
+                      {groupedTrackers[category].map((tracker) => (
+                        <li
+                          key={tracker.domain}
+                          className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="font-mono">{tracker.domain}</span>
+                            <span className="block text-gray-500 text-xs mt-1">
+                              Identified as: {tracker.name}
+                            </span>
+                          </div>
+                          <span className="font-sans text-xs bg-white text-gray-600 px-2 py-1 rounded-full border">
+                            {tracker.company}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <span className="font-sans text-xs bg-white text-gray-600 px-2 py-1 rounded-full border">
-                    {tracker.company}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                );
+              })
+            ) : (
+              <p className="text-gray-600 text-center py-4">
+                No specific tracker domains were identified.
+              </p>
+            )}
           </div>
-        );
-      })
-    ) : (
-      <p className="text-gray-600 text-center py-4">
-        No specific tracker domains were identified.
-      </p>
-    )}
-  </div>
-</CollapsibleSection>
+        </CollapsibleSection>
       </div>
     </div>
   );

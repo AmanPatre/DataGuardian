@@ -57,40 +57,44 @@ class DataGuardianContentScript {
   }
 
   setupRequestMonitoring() {
+    // BUG 4 & 8 FIX: capture the class instance before overriding prototypes.
+    // Inside prototype overrides, 'this' refers to the XHR/element — not the class.
+    const self = this;
+
     // Monitor fetch requests
     const originalFetch = window.fetch;
     window.fetch = async (resource, options) => {
       const url = typeof resource === 'string' ? resource : resource.url;
 
-      if (this.shouldBlockRequest(url)) {
-        this.blockedRequests.add(url);
+      if (self.shouldBlockRequest(url)) {
+        self.blockedRequests.add(url);
         return Promise.reject(new Error('Blocked by DataGuardian privacy protection'));
       }
 
-      return originalFetch.call(this, resource, options);
+      return originalFetch.call(window, resource, options);
     };
 
-    // Monitor XMLHttpRequest
+    // Monitor XMLHttpRequest (BUG 4 FIX: use 'self' not 'this')
     const originalXHROpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url, ...args) {
-      if (this.shouldBlockRequest(url)) {
-        this.blockedRequests.add(url);
+      if (self.shouldBlockRequest(url)) {      // ← 'self' is the class instance
+        self.blockedRequests.add(url);
         return; // Block the request
       }
       return originalXHROpen.call(this, method, url, ...args);
     };
 
-    // Monitor script loading
-    const originalCreateElement = document.createElement;
+    // Monitor script loading (BUG 8 FIX: use 'self' not 'this')
+    const originalCreateElement = document.createElement.bind(document);
     document.createElement = function (tagName) {
-      const element = originalCreateElement.call(this, tagName);
+      const element = originalCreateElement(tagName);
 
       if (tagName.toLowerCase() === 'script') {
         const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src')?.set;
         if (originalSrcSetter) {
           Object.defineProperty(element, 'src', {
             set: function (value) {
-              if (this.shouldBlockRequest(value)) {
+              if (self.shouldBlockRequest(value)) { // ← 'self' is the class instance
                 return; // Don't set the src
               }
               originalSrcSetter.call(this, value);
@@ -106,6 +110,7 @@ class DataGuardianContentScript {
       return element;
     };
   }
+
 
   setupDOMMonitoring() {
     // Monitor for dynamically added scripts
@@ -128,61 +133,24 @@ class DataGuardianContentScript {
   }
 
   shouldBlockRequest(url) {
-    if (!this.settings) return false;
+    if (!url) return false;
 
-    const trackerDomains = [
-      // Ad trackers
-      'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-      'amazon-adsystem.com', 'criteo.com', 'outbrain.com', 'taboola.com',
-      'adnxs.com', 'rubiconproject.com', 'pubmatic.com',
+    // Use shared classifier (window.DG_TRACKER_CATEGORIES/dgIsTracker is from trackerRules.js)
+    if (!window.dgIsTracker || !window.dgIsTracker(url)) return false;
 
-      // Analytics trackers
-      'google-analytics.com', 'googletagmanager.com', 'mixpanel.com',
-      'segment.com', 'amplitude.com', 'hotjar.com', 'fullstory.com',
-      'mouseflow.com', 'chartbeat.com',
+    const info = window.dgClassifyDomain(url);
+    const category = info.category;
 
-      // Social trackers
-      'facebook.net', 'connect.facebook.net', 'twitter.com', 'ads-twitter.com',
-      'linkedin.com', 'snapchat.com', 'pinterest.com', 'tiktok.com'
-    ];
+    // Check specific blocking settings (Fixed in Bug 5 to use correct blockAdvertisingTrackers etc)
+    if (this.settings.blockAdvertisingTrackers && category === window.DG_TRACKER_CATEGORIES.ADVERTISING) return true;
+    if (this.settings.blockAnalyticsTrackers && category === window.DG_TRACKER_CATEGORIES.ANALYTICS) return true;
+    if (this.settings.blockSocialTrackers && category === window.DG_TRACKER_CATEGORIES.SOCIAL) return true;
+    if (this.settings.blockTagManagerTrackers && category === window.DG_TRACKER_CATEGORIES.TAG_MANAGER) return true;
+    if (this.settings.blockCDNUtilityTrackers && category === window.DG_TRACKER_CATEGORIES.CDN_UTILITY) return true;
 
-    const isTrackerDomain = trackerDomains.some(domain => url.includes(domain));
-
-    if (!isTrackerDomain) return false;
-
-    // Check specific blocking settings
-    if (this.settings.blockAdTrackers && this.isAdTracker(url)) return true;
-    if (this.settings.blockAnalyticsTrackers && this.isAnalyticsTracker(url)) return true;
-    if (this.settings.blockSocialTrackers && this.isSocialTracker(url)) return true;
     if (this.settings.blockTrackers) return true;
 
     return false;
-  }
-
-  isAdTracker(url) {
-    const adDomains = [
-      'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-      'amazon-adsystem.com', 'criteo.com', 'outbrain.com', 'taboola.com',
-      'adnxs.com', 'rubiconproject.com', 'pubmatic.com'
-    ];
-    return adDomains.some(domain => url.includes(domain));
-  }
-
-  isAnalyticsTracker(url) {
-    const analyticsDomains = [
-      'google-analytics.com', 'googletagmanager.com', 'mixpanel.com',
-      'segment.com', 'amplitude.com', 'hotjar.com', 'fullstory.com',
-      'mouseflow.com', 'chartbeat.com'
-    ];
-    return analyticsDomains.some(domain => url.includes(domain));
-  }
-
-  isSocialTracker(url) {
-    const socialDomains = [
-      'facebook.net', 'connect.facebook.net', 'twitter.com', 'ads-twitter.com',
-      'linkedin.com', 'snapchat.com', 'pinterest.com', 'tiktok.com'
-    ];
-    return socialDomains.some(domain => url.includes(domain));
   }
 
   // Get blocked request count for this page

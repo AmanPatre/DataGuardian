@@ -1,21 +1,10 @@
-// backend/services/geminiService.js
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { TRACKER_CATEGORIES, classifyDomain } from "../utility/trackerRules.js";
 
 // Simple in-memory cache for AI responses
 const aiCache = new Map();
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
-
-// [UPDATE] Centralized source of truth for all tracker categories.
-// These categories are derived from your classifyDomain function.
-export const TRACKER_CATEGORIES = {
-  Advertising: "Advertising",
-  Analytics: "Analytics",
-  Social: "Social",
-  "Tag Manager": "Tag Manager",
-  "CDN/Utility": "CDN/Utility",
-  Unknown: "Unknown",
-};
-
+const MAX_CACHE_SIZE = 200;
 
 export async function generateAIPrivacySummary(trackers, url) {
   try {
@@ -49,7 +38,7 @@ export async function generateAIPrivacySummary(trackers, url) {
       });
       return fallbackResponse;
     }
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
     // Create a comprehensive prompt
     const prompt = `
 You are a privacy analysis expert. Analyze the following website and its trackers to provide a comprehensive privacy summary.
@@ -149,15 +138,19 @@ Provide realistic assessments based on the actual trackers detected.
       trackerBreakdown: limitArray(validatedSummary.trackerBreakdown, 70).slice(0, 4),
     };
 
+    // BUG 2 FIX: rawResponse removed — it exposed internal Gemini prompt structure to clients
     const finalResponse = {
       success: true,
       summary: { ...validatedSummary, popupSummary, fullSummary },
       trackerCount: trackers.length,
       trackerDetails,
-      rawResponse: text, // For debugging
     };
 
-    // Cache the successful response
+    // Cache the successful response (BUG 9 FIX: evict oldest if over limit)
+    if (aiCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = aiCache.keys().next().value;
+      aiCache.delete(oldestKey);
+    }
     aiCache.set(cacheKey, {
       data: finalResponse,
       timestamp: Date.now()
@@ -274,280 +267,4 @@ function buildTrackerDetails(trackers) {
     });
   }
   return details;
-}
-
-function classifyDomain(lower) {
-  const rules = [
-    {
-      re: /doubleclick|googlesyndication|googleadservices|ads\.google|adservice\.google/,
-      name: "Google Ads",
-      category: "Advertising",
-      company: "Google",
-    },
-    {
-      re: /googletagmanager|gtm/,
-      name: "Google Tag Manager",
-      category: "Tag Manager",
-      company: "Google",
-    },
-    {
-      re: /google-analytics|analytics\.google/,
-      name: "Google Analytics",
-      category: "Analytics",
-      company: "Google",
-    },
-    {
-      re: /gstatic|googleapis/,
-      name: "Google Static/Services",
-      category: "CDN/Utility",
-      company: "Google",
-    },
-    {
-      re: /\.google\./,
-      name: "Google Services",
-      category: "CDN/Utility",
-      company: "Google",
-    },
-
-    {
-      re: /facebook|fbcdn|fbevents|connect\.facebook\.net/,
-      name: "Meta Pixel",
-      category: "Advertising",
-      company: "Meta",
-    },
-    {
-      re: /instagram\.com/,
-      name: "Instagram",
-      category: "Social",
-      company: "Meta",
-    },
-
-    {
-      re: /linkedin|licdn|bat\.bing\.com|bingads/,
-      name: "Microsoft Ads/LinkedIn",
-      category: "Advertising",
-      company: "Microsoft",
-    },
-
-    {
-      re: /twitter|tiktok|snapchat|pinterest/,
-      name: "Social Network",
-      category: "Social",
-      company: "Various",
-    },
-
-    {
-      re: /adnxs|appnexus/,
-      name: "AppNexus (Adnxs)",
-      category: "Advertising",
-      company: "Microsoft (Xandr)",
-    },
-    {
-      re: /rubiconproject/,
-      name: "Rubicon Project (Magnite)",
-      category: "Advertising",
-      company: "Magnite",
-    },
-    {
-      re: /pubmatic/,
-      name: "PubMatic",
-      category: "Advertising",
-      company: "PubMatic",
-    },
-    {
-      re: /criteo/,
-      name: "Criteo",
-      category: "Advertising",
-      company: "Criteo",
-    },
-    {
-      re: /taboola/,
-      name: "Taboola",
-      category: "Advertising",
-      company: "Taboola",
-    },
-    {
-      re: /outbrain/,
-      name: "Outbrain",
-      category: "Advertising",
-      company: "Outbrain",
-    },
-    { re: /openx/, name: "OpenX", category: "Advertising", company: "OpenX" },
-    {
-      re: /adroll/,
-      name: "AdRoll",
-      category: "Advertising",
-      company: "NextRoll",
-    },
-
-    {
-      re: /mixpanel/,
-      name: "Mixpanel",
-      category: "Analytics",
-      company: "Mixpanel",
-    },
-    {
-      re: /segment\.com/,
-      name: "Segment",
-      category: "Analytics",
-      company: "Twilio Segment",
-    },
-    {
-      re: /amplitude/,
-      name: "Amplitude",
-      category: "Analytics",
-      company: "Amplitude",
-    },
-    { re: /hotjar/, name: "Hotjar", category: "Analytics", company: "Hotjar" },
-    {
-      re: /fullstory/,
-      name: "FullStory",
-      category: "Analytics",
-      company: "FullStory",
-    },
-    {
-      re: /logrocket/,
-      name: "LogRocket",
-      category: "Analytics",
-      company: "LogRocket",
-    },
-    {
-      re: /optimizely/,
-      name: "Optimizely",
-      category: "Analytics",
-      company: "Optimizely",
-    },
-    {
-      re: /mouseflow/,
-      name: "Mouseflow",
-      category: "Analytics",
-      company: "Mouseflow",
-    },
-    {
-      re: /chartbeat/,
-      name: "Chartbeat",
-      category: "Analytics",
-      company: "Chartbeat",
-    },
-    {
-      re: /clicktale/,
-      name: "Clicktale",
-      category: "Analytics",
-      company: "Clicktale",
-    },
-    {
-      re: /mathtag/,
-      name: "MediaMath (mathtag)",
-      category: "Advertising",
-      company: "MediaMath",
-    },
-    {
-      re: /doubleverify/,
-      name: "DoubleVerify",
-      category: "Advertising",
-      company: "DoubleVerify",
-    },
-
-    {
-      re: /scorecardresearch\.com/,
-      name: "ScorecardResearch",
-      category: "Advertising",
-      company: "Comscore",
-    },
-    {
-      re: /comscore\.com/,
-      name: "Comscore",
-      category: "Advertising",
-      company: "Comscore",
-    },
-    {
-      re: /quantserve\.com/,
-      name: "Quantserve",
-      category: "Advertising",
-      company: "Quantcast",
-    },
-    {
-      re: /demdex\.net/,
-      name: "Adobe Experience Cloud (Demdex)",
-      category: "Advertising",
-      company: "Adobe",
-    },
-    {
-      re: /adsrvr\.org/,
-      name: "The Trade Desk",
-      category: "Advertising",
-      company: "The Trade Desk",
-    },
-    {
-      re: /eyeota\.net/,
-      name: "Eyeota",
-      category: "Advertising",
-      company: "Eyeota",
-    },
-    {
-      re: /bluekai\.com/,
-      name: "Oracle BlueKai",
-      category: "Advertising",
-      company: "Oracle",
-    },
-
-    {
-      re: /amazon-adsystem\.com/,
-      name: "Amazon Advertising",
-      category: "Advertising",
-      company: "Amazon",
-    },
-    {
-      re: /bouncex\.net|wunderkind\.co/,
-      name: "Wunderkind (BounceX)",
-      category: "Advertising",
-      company: "Wunderkind",
-    },
-    {
-      re: /onetag\.com|s-onetag\.com/,
-      name: "OneTag",
-      category: "Advertising",
-      company: "OneTag",
-    },
-    {
-      re: /permutive/,
-      name: "Permutive",
-      category: "Advertising",
-      company: "Permutive",
-    },
-    {
-      re: /turner\.com|warnermediacdn\.com/,
-      name: "Turner/Warner CDN",
-      category: "CDN/Utility",
-      company: "Warner Bros. Discovery",
-    },
-    {
-      re: /collector\.github\.com/,
-      name: "GitHub Telemetry",
-      category: "Analytics",
-      company: "GitHub",
-    },
-    {
-      re: /cloudflareinsights\.com/,
-      name: "Cloudflare Web Analytics",
-      category: "Analytics",
-      company: "Cloudflare",
-    },
-    {
-      re: /dubcdn\.com/,
-      name: "Dub CDN",
-      category: "CDN/Utility",
-      company: "Dub",
-    },
-  ];
-
-  for (const r of rules) {
-    if (r.re.test(lower))
-      return { name: r.name, category: r.category, company: r.company };
-  }
-
-  if (/analytics|track|collect|pixel|beacon|telemetry|metrics/.test(lower)) {
-    return { name: "Tracker", category: "Analytics", company: "Unknown" };
-  }
-  return { name: lower, category: "Unknown", company: "Unknown" };
 }
