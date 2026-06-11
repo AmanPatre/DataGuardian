@@ -11,6 +11,9 @@ import { setupSwagger } from "./config/swagger.js";
 
 const app = express();
 
+// Trust the first proxy (required for Rate Limiting on Render)
+app.set('trust proxy', 1);
+
 // ── 1. Security headers (must be first) ──────────────────────────────────────
 app.use(helmet());
 
