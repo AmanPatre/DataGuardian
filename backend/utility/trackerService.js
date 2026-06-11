@@ -64,12 +64,6 @@ export async function detectTrackers(url, options = {}) {
       ]
     };
 
-    // If running on Render, use the explicitly installed browser path
-    if (process.env.PUPPETEER_CACHE_DIR) {
-      launchOptions.executablePath = '/usr/bin/google-chrome-stable';
-      // If that fails, puppeteer usually finds it in the cache dir automatically after our build command
-    }
-
     browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
