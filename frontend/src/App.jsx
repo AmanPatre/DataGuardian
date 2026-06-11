@@ -110,9 +110,12 @@ function App() {
 
     logInfo("Sending request to backend...");
 
+    // Use environment variable, fallback to localhost for development
+    const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
     // Send to backend
     axios
-      .post("http://localhost:5000/api/sites/analyze", requestData)
+      .post(`${API_BASE}/api/sites/analyze`, requestData)
       .then((response) => {
         logInfo("Analysis complete!", response.data);
         const site = response.data.site;
@@ -402,8 +405,8 @@ function App() {
             onClick={handleManualSubmit}
             disabled={!manualUrl.trim() || loading}
             className={`w-full mt-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${manualUrl.trim() && !loading
-                ? "bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              ? "bg-blue-500 text-white hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}
           >
             {loading ? (

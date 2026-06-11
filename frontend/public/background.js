@@ -126,21 +126,26 @@ class DataGuardianBackground {
     // This ensures rules are updated when switching tabs
     chrome.tabs.onActivated.addListener(async (activeInfo) => {
       try {
-        const tab = await chrome.tabs.get(activeInfo.tabId);
+        if (!activeInfo.tabId) return;
+        const tab = await chrome.tabs.get(activeInfo.tabId).catch(() => null);
         if (tab && tab.url) {
           await this.loadSettings(tab.url);
           this.setupRequestBlocking();
         }
       } catch (error) {
-
+        // Silently handle - tab might have closed
       }
     });
 
     chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-      if (changeInfo.status === 'complete' && tab.url) {
-        await this.loadSettings(tab.url);
-        this.applySettingsToTab(tab);
-        this.setupRequestBlocking(); // Also re-apply blocking rules
+      try {
+        if (changeInfo.status === 'complete' && tab && tab.url) {
+          await this.loadSettings(tab.url);
+          this.applySettingsToTab(tab);
+          this.setupRequestBlocking();
+        }
+      } catch (error) {
+        // Silently handle
       }
     });
 
@@ -360,7 +365,7 @@ class DataGuardianBackground {
 
   // Use centralized rules for DNR pattern generation
   getTrackerDomains() {
-    const categories = window.DG_TRACKER_CATEGORIES;
+    const categories = DG_TRACKER_CATEGORIES;
     const trackerDomains = {};
 
     Object.values(categories).forEach(category => {
@@ -369,7 +374,7 @@ class DataGuardianBackground {
         return;
       }
 
-      const rawDomains = window.dgGetDomainsForCategory(category);
+      const rawDomains = dgGetDomainsForCategory(category);
       // Map to DNR urlFilter patterns: *://*.DOMAIN/*
       trackerDomains[category] = rawDomains.map(d =>
         d.includes('*') ? d : `*://*.${d}/*`

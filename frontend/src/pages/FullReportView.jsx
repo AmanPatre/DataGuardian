@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import ModernHeader from "../components/ModernHeader";
 import ModernToggle from "../components/ModernToggle";
 import AIPrivacyAnalysis from "../components/AIPrivacyAnalysis";
@@ -92,7 +92,7 @@ const CollapsibleSection = ({ title, icon, children, defaultOpen = true }) => {
 
 const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
   const { url, grade, trackers = {}, aiSummary, simplifiedPolicy } = siteData;
-  const trackerCategories = Object.keys(trackers);
+  const trackerCategories = useMemo(() => Object.keys(trackers), [trackers]);
 
   const [privacyManager] = useState(new PrivacyManager());
   const [trackerSettings, setTrackerSettings] = useState({});
@@ -111,7 +111,7 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     {}
   );
 
-  const trackerKeysToken = useMemo(() => Object.keys(trackers).join(","), [trackers]);
+  const trackerKeysToken = useMemo(() => trackerCategories.join(","), [trackerCategories]);
 
   // Load settings for all detected tracker categories
   useEffect(() => {
@@ -136,7 +136,7 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     };
     if (trackerCategories.length > 0) loadTrackerSettings();
     else setIsLoading(false);
-  }, [privacyManager, url, trackerKeysToken, trackerCategories]);
+  }, [privacyManager, url, trackerKeysToken]);
 
 
   // [NEW] Recalculate score whenever settings change
@@ -149,14 +149,14 @@ const FullReportView = ({ siteData = {}, onNavigate, setSiteData }) => {
     );
 
     // Only update if the grade has actually changed to prevent re-render loops
-    if (newGrade !== siteData.grade) {
-      setSiteData((prevData) => ({
-        ...prevData,
+    if (newGrade !== siteData.grade || newScore !== siteData.score) {
+      setSiteData({
+        ...siteData,
         score: newScore,
         grade: newGrade,
-      }));
+      });
     }
-  }, [trackerSettings, siteData, isLoading, setSiteData]);
+  }, [trackerSettings, aiSummary]);
 
   // Handle toggling tracker categories
   const handleTrackerToggle = async (enabled, settingKey) => {
