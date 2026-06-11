@@ -64,6 +64,11 @@ export async function detectTrackers(url, options = {}) {
       ]
     };
 
+    // Explicitly use the executable path if provided via environment variable
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
     browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
