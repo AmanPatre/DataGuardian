@@ -51,17 +51,26 @@ export async function detectTrackers(url, options = {}) {
   const mainDomain = new URL(url).hostname;
 
   try {
-    // Launch browser with optimized settings
-    browser = await puppeteer.launch({
-      headless: true,
+    // Launch browser with optimized settings for Linux/Render
+    const launchOptions = {
+      headless: "new",
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-web-security',
         '--disable-features=VizDisplayCompositor',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--single-process'
       ]
-    });
+    };
+
+    // If running on Render, use the explicitly installed browser path
+    if (process.env.PUPPETEER_CACHE_DIR) {
+      launchOptions.executablePath = '/usr/bin/google-chrome-stable';
+      // If that fails, puppeteer usually finds it in the cache dir automatically after our build command
+    }
+
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
 
